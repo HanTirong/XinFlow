@@ -1,5 +1,6 @@
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/date/payday_calculator.dart';
+import 'package:xinflow/features/categories/domain/default_categories.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_summary.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
@@ -89,6 +90,37 @@ final class HomeSnapshot {
       ],
       recentTransactions: transactions.take(4).toList(growable: false),
       isPreview: true,
+    );
+  }
+
+  factory HomeSnapshot.fromData({
+    required SalaryCycle cycle,
+    required Iterable<TransactionEntry> transactions,
+    required DateTime now,
+  }) {
+    final activeTransactions = transactions
+        .where((entry) => !entry.isDeleted)
+        .toList(growable: false);
+    final today = LocalDate.fromDateTime(now);
+
+    return HomeSnapshot(
+      cycle: cycle,
+      summary: SalarySummary.fromTransactions(
+        salaryCents: cycle.salaryCents,
+        transactions: activeTransactions,
+      ),
+      daysUntilPayday: today.daysUntil(cycle.expectedPayDate).clamp(0, 99999),
+      shortcuts: const [
+        CategoryShortcut(id: DefaultCategoryIds.food, label: '饮食'),
+        CategoryShortcut(id: DefaultCategoryIds.shopping, label: '购物'),
+        CategoryShortcut(id: DefaultCategoryIds.housing, label: '住房'),
+        CategoryShortcut(id: DefaultCategoryIds.transport, label: '交通'),
+        CategoryShortcut(id: DefaultCategoryIds.digital, label: '数字服务'),
+        CategoryShortcut(id: DefaultCategoryIds.saving, label: '存款'),
+        CategoryShortcut(id: DefaultCategoryIds.investment, label: '理财'),
+        CategoryShortcut(id: DefaultCategoryIds.other, label: '其他'),
+      ],
+      recentTransactions: activeTransactions.take(5).toList(growable: false),
     );
   }
 

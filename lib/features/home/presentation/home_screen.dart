@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/core/money/money.dart';
+import 'package:xinflow/features/categories/domain/default_categories.dart';
 import 'package:xinflow/features/home/domain/home_snapshot.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
@@ -426,37 +427,37 @@ final class _ShortcutAppearance {
 }
 
 _ShortcutAppearance _shortcutAppearance(String id) => switch (id) {
-  'food' => const _ShortcutAppearance(
+  DefaultCategoryIds.food || 'food' => const _ShortcutAppearance(
     icon: Icons.restaurant_rounded,
     foreground: Color(0xFFF97355),
     background: Color(0xFFFFF0EB),
   ),
-  'shopping' => const _ShortcutAppearance(
+  DefaultCategoryIds.shopping || 'shopping' => const _ShortcutAppearance(
     icon: Icons.shopping_bag_rounded,
     foreground: Color(0xFFE95786),
     background: Color(0xFFFFEDF3),
   ),
-  'housing' => const _ShortcutAppearance(
+  DefaultCategoryIds.housing || 'housing' => const _ShortcutAppearance(
     icon: Icons.home_rounded,
     foreground: Color(0xFF3B82F6),
     background: Color(0xFFEDF5FF),
   ),
-  'transport' => const _ShortcutAppearance(
+  DefaultCategoryIds.transport || 'transport' => const _ShortcutAppearance(
     icon: Icons.directions_bus_rounded,
     foreground: Color(0xFF0F9F6E),
     background: Color(0xFFECF9F4),
   ),
-  'digital' => const _ShortcutAppearance(
+  DefaultCategoryIds.digital || 'digital' => const _ShortcutAppearance(
     icon: Icons.laptop_mac_rounded,
     foreground: Color(0xFF8B5CF6),
     background: Color(0xFFF3EFFF),
   ),
-  'saving' => const _ShortcutAppearance(
+  DefaultCategoryIds.saving || 'saving' => const _ShortcutAppearance(
     icon: Icons.savings_rounded,
     foreground: Color(0xFFF59E0B),
     background: Color(0xFFFFF6E5),
   ),
-  'investment' => const _ShortcutAppearance(
+  DefaultCategoryIds.investment || 'investment' => const _ShortcutAppearance(
     icon: Icons.bar_chart_rounded,
     foreground: Color(0xFF0891B2),
     background: Color(0xFFEAF9FC),
@@ -469,13 +470,13 @@ _ShortcutAppearance _shortcutAppearance(String id) => switch (id) {
 };
 
 String _categoryLabel(String id) => switch (id) {
-  'food' => '饮食 / 外食',
-  'shopping' => '购物 / 超市',
-  'housing' => '住房',
-  'transport' => '交通',
-  'digital' => '数字服务 / AI 软件',
-  'saving' => '存款',
-  'investment' => '理财',
+  DefaultCategoryIds.food || 'food' => '饮食 / 外食',
+  DefaultCategoryIds.shopping || 'shopping' => '购物 / 超市',
+  DefaultCategoryIds.housing || 'housing' => '住房',
+  DefaultCategoryIds.transport || 'transport' => '交通',
+  DefaultCategoryIds.digital || 'digital' => '数字服务 / AI 软件',
+  DefaultCategoryIds.saving || 'saving' => '存款',
+  DefaultCategoryIds.investment || 'investment' => '理财',
   _ => '其他',
 };
 

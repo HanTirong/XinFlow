@@ -16,40 +16,37 @@ final class NoActiveSalaryCycle implements Exception {
 
 final class CloseAndStartNextCycle {
   const CloseAndStartNextCycle({
-    required SalaryCycleRepository salaryCycles,
-    required TransactionRepository transactions,
-    required Clock clock,
-    required IdGenerator idGenerator,
-  }) : _salaryCycles = salaryCycles,
-       _transactions = transactions,
-       _clock = clock,
-       _idGenerator = idGenerator;
+    required this.salaryCycles,
+    required this.transactions,
+    required this.clock,
+    required this.idGenerator,
+  });
 
-  final SalaryCycleRepository _salaryCycles;
-  final TransactionRepository _transactions;
-  final Clock _clock;
-  final IdGenerator _idGenerator;
+  final SalaryCycleRepository salaryCycles;
+  final TransactionRepository transactions;
+  final Clock clock;
+  final IdGenerator idGenerator;
 
   Future<CycleTransition> execute({
     required int newSalaryCents,
     required int salaryDay,
   }) async {
-    final activeCycle = await _salaryCycles.getActiveCycle();
+    final activeCycle = await salaryCycles.getActiveCycle();
     if (activeCycle == null) {
       throw const NoActiveSalaryCycle();
     }
 
-    final entries = await _transactions.listCycleTransactions(activeCycle.id);
+    final entries = await transactions.listCycleTransactions(activeCycle.id);
     final summary = SalarySummary.fromTransactions(
       salaryCents: activeCycle.salaryCents,
       transactions: entries,
     );
-    final confirmedAt = _clock.now();
+    final confirmedAt = clock.now();
     final confirmedDate = LocalDate.fromDateTime(confirmedAt);
     final transition = SalaryCyclePolicy.closeAndStartNext(
       currentCycle: activeCycle,
       currentSummary: summary,
-      newCycleId: _idGenerator.next(),
+      newCycleId: idGenerator.next(),
       newSalaryCents: newSalaryCents,
       confirmedAt: confirmedAt,
       nextExpectedPayDate: PaydayCalculator.forNextCycle(
@@ -58,7 +55,7 @@ final class CloseAndStartNextCycle {
       ),
     );
 
-    await _salaryCycles.replaceActiveCycle(
+    await salaryCycles.replaceActiveCycle(
       closedCycle: transition.closedCycle,
       newActiveCycle: transition.newActiveCycle,
     );
