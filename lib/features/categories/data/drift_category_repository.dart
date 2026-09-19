@@ -25,6 +25,19 @@ final class DriftCategoryRepository implements CategoryRepository {
   }
 
   @override
+  Future<List<Category>> listAll() async {
+    final rows =
+        await (_database.select(_database.categoryRecords)
+              ..where((row) => row.deletedAt.isNull())
+              ..orderBy([
+                (row) => OrderingTerm.asc(row.parentId),
+                (row) => OrderingTerm.asc(row.sortOrder),
+              ]))
+            .get();
+    return rows.map((row) => row.toDomain()).toList(growable: false);
+  }
+
+  @override
   Future<Category?> getById(String id) async {
     final row =
         await (_database.select(_database.categoryRecords)..where(
@@ -35,5 +48,54 @@ final class DriftCategoryRepository implements CategoryRepository {
             ))
             .getSingleOrNull();
     return row?.toDomain();
+  }
+
+  @override
+  Future<void> add(Category category) async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (category.parentId != null) {
+      final parent = await getById(category.parentId!);
+      if (parent == null ||
+          !parent.isTopLevel ||
+          parent.flowType != category.flowType) {
+        throw ArgumentError('二级分类必须关联相同性质的有效一级分类。');
+      }
+    }
+    await _database
+        .into(_database.categoryRecords)
+        .insert(
+          CategoryRecordsCompanion.insert(
+            id: category.id,
+            parentId: Value(category.parentId),
+            name: category.name.trim(),
+            flowType: category.flowType.name,
+            iconKey: category.iconKey,
+            sortOrder: category.sortOrder,
+            isSystem: category.isSystem,
+            isActive: Value(category.isActive),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+  }
+
+  @override
+  Future<void> updateNameAndState({
+    required String id,
+    required String name,
+    required bool isActive,
+  }) async {
+    if (name.trim().isEmpty) throw ArgumentError('分类名称不能为空。');
+    final affected =
+        await (_database.update(
+          _database.categoryRecords,
+        )..where((row) => row.id.equals(id) & row.deletedAt.isNull())).write(
+          CategoryRecordsCompanion(
+            name: Value(name.trim()),
+            isActive: Value(isActive),
+            updatedAt: Value(DateTime.now().toUtc().millisecondsSinceEpoch),
+          ),
+        );
+    if (affected != 1) throw StateError('分类不存在或已经删除。');
   }
 }

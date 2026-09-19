@@ -45,6 +45,16 @@ final class DriftTransactionRepository implements TransactionRepository {
   }
 
   @override
+  Future<List<TransactionEntry>> listRefundsFor(String transactionId) async {
+    final rows =
+        await (_database.select(_database.transactionRecords)
+              ..where((row) => row.reversesTransactionId.equals(transactionId))
+              ..orderBy([(row) => OrderingTerm.desc(row.occurredAt)]))
+            .get();
+    return rows.map((row) => row.toDomain()).toList(growable: false);
+  }
+
+  @override
   Future<void> add(TransactionEntry entry) async {
     final now = clock.now().toUtc().millisecondsSinceEpoch;
     await _database

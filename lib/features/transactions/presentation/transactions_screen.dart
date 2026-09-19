@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 typedef EditAllocationCallback = void Function(TransactionEntry entry);
@@ -20,11 +21,24 @@ final class TransactionsScreen extends ConsumerStatefulWidget {
 
 final class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   _FlowFilter _filter = _FlowFilter.all;
+  String? _selectedCycleId;
 
   @override
   Widget build(BuildContext context) {
-    final transactions = ref.watch(currentCycleTransactionsProvider);
-    final categories = switch (ref.watch(activeCategoriesProvider)) {
+    final cycles = switch (ref.watch(salaryCyclesProvider)) {
+      AsyncData(:final value) => value,
+      _ => const <SalaryCycle>[],
+    };
+    final selectedCycle = cycles.isEmpty
+        ? null
+        : cycles.firstWhere(
+            (cycle) => cycle.id == _selectedCycleId,
+            orElse: () => cycles.first,
+          );
+    final transactions = selectedCycle == null
+        ? const AsyncValue<List<TransactionEntry>>.data([])
+        : ref.watch(cycleTransactionsProvider(selectedCycle.id));
+    final categories = switch (ref.watch(allCategoriesProvider)) {
       AsyncData(:final value) => value,
       _ => const <Category>[],
     };
@@ -36,7 +50,9 @@ final class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
             child: Text(
-              '当前周期流水',
+              selectedCycle?.status == SalaryCycleStatus.closed
+                  ? '历史周期流水'
+                  : '当前周期流水',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           ),
@@ -56,18 +72,43 @@ final class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   setState(() => _filter = selection.single),
             ),
           ),
+          if (cycles.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: DropdownButtonFormField<String>(
+                initialValue: selectedCycle?.id,
+                decoration: const InputDecoration(
+                  labelText: '工资周期',
+                  prefixIcon: Icon(Icons.calendar_month_outlined),
+                ),
+                items: [
+                  for (final cycle in cycles)
+                    DropdownMenuItem(
+                      value: cycle.id,
+                      child: Text(_cycleLabel(cycle)),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _selectedCycleId = value),
+              ),
+            ),
           const SizedBox(height: 12),
           Expanded(
             child: transactions.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stackTrace) => _LoadError(
                 error: error,
-                onRetry: () => ref.invalidate(currentCycleTransactionsProvider),
+                onRetry: selectedCycle == null
+                    ? () => ref.invalidate(salaryCyclesProvider)
+                    : () => ref.invalidate(
+                        cycleTransactionsProvider(selectedCycle.id),
+                      ),
               ),
               data: (entries) => _TransactionList(
                 entries: _filtered(entries),
                 categories: categories,
-                onEdit: widget.onEdit,
+                onEdit: selectedCycle?.status == SalaryCycleStatus.active
+                    ? widget.onEdit
+                    : null,
               ),
             ),
           ),
@@ -105,7 +146,7 @@ final class _TransactionList extends StatelessWidget {
 
   final List<TransactionEntry> entries;
   final List<Category> categories;
-  final EditAllocationCallback onEdit;
+  final EditAllocationCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -142,8 +183,8 @@ final class _TransactionList extends StatelessWidget {
             Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
-                onTap: entry.entryKind == EntryKind.allocation
-                    ? () => onEdit(entry)
+                onTap: entry.entryKind == EntryKind.allocation && onEdit != null
+                    ? () => onEdit!(entry)
                     : null,
                 leading: CircleAvatar(
                   child: Icon(_iconFor(entry.flowType), size: 20),
@@ -174,7 +215,8 @@ final class _TransactionList extends StatelessWidget {
                             : null,
                       ),
                     ),
-                    if (entry.entryKind == EntryKind.allocation) ...[
+                    if (entry.entryKind == EntryKind.allocation &&
+                        onEdit != null) ...[
                       const SizedBox(width: 4),
                       const Icon(Icons.chevron_right_rounded),
                     ],
@@ -246,3 +288,14 @@ String _flowLabel(FlowType flowType) => switch (flowType) {
   FlowType.saving => '存款',
   FlowType.investment => '理财',
 };
+
+String _cycleLabel(SalaryCycle cycle) {
+  final start = cycle.startedAt;
+  final end = cycle.status == SalaryCycleStatus.active
+      ? cycle.expectedPayDate.toString()
+      : '${cycle.closedAt!.year.toString().padLeft(4, '0')}-'
+            '${cycle.closedAt!.month.toString().padLeft(2, '0')}-'
+            '${cycle.closedAt!.day.toString().padLeft(2, '0')}';
+  final prefix = cycle.status == SalaryCycleStatus.active ? '当前' : '历史';
+  return '$prefix：${start.year}-${start.month}-${start.day} 至 $end';
+}

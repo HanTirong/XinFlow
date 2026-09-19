@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
+import 'package:xinflow/features/backup/presentation/backup_card.dart';
+import 'package:xinflow/features/categories/presentation/category_management_card.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
 
 final class SettingsScreen extends ConsumerWidget {
@@ -9,6 +11,7 @@ final class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preference = ref.watch(themePreferenceProvider);
+    final startup = ref.watch(startupProvider);
 
     return SafeArea(
       child: ListView(
@@ -94,15 +97,92 @@ final class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.calendar_today_outlined),
+              title: const Text('固定发薪日'),
+              subtitle: Text(
+                startup.when(
+                  data: (value) => '每月 ${value.settings?.salaryDay ?? '-'} 日',
+                  loading: () => '正在读取…',
+                  error: (error, stackTrace) => '读取失败',
+                ),
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: startup.value?.settings == null
+                  ? null
+                  : () => _editSalaryDay(
+                      context,
+                      ref,
+                      startup.value!.settings!.salaryDay,
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const CategoryManagementCard(),
+          const SizedBox(height: 12),
+          const BackupCard(),
+          const SizedBox(height: 12),
           const Card(
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
-              title: Text('更多设置'),
-              subtitle: Text('发薪日、分类、备份与恢复将在后续里程碑开放。'),
+              title: Text('薪流 0.1.0'),
+              subtitle: Text('数据库版本 1 · 备份格式版本 1'),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _editSalaryDay(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) async {
+    final controller = TextEditingController(text: current.toString());
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('修改固定发薪日'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '每月日期',
+            helperText: '请输入 1 至 31；月份较短时取当月最后一天。',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    final value = int.tryParse(controller.text);
+    controller.dispose();
+    if (confirmed != true) return;
+    if (value == null || value < 1 || value > 31) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('发薪日必须是 1 至 31。')));
+      }
+      return;
+    }
+    await ref.read(settingsRepositoryProvider).updateSalaryDay(value);
+    ref.invalidate(startupProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('固定发薪日已更新。')));
+    }
   }
 }

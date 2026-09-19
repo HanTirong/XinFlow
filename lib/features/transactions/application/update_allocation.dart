@@ -2,6 +2,7 @@ import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/features/categories/data/category_repository.dart';
 import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart';
 import 'package:xinflow/features/transactions/data/transaction_repository.dart';
+import 'package:xinflow/features/transactions/domain/refund_policy.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 final class UpdateAllocation {
@@ -72,6 +73,14 @@ final class UpdateAllocation {
       occurredOn: occurredOn,
       note: trimmedNote == null || trimmedNote.isEmpty ? null : trimmedNote,
     );
+    final refunds = await transactions.listRefundsFor(transactionId);
+    if (RefundPolicy.refundableCents(
+          original: updated,
+          existingRefunds: refunds,
+        ) <
+        0) {
+      throw const TransactionRuleViolation('修改后的消费金额不能小于累计退款金额。');
+    }
     await transactions.update(updated);
     return updated;
   }

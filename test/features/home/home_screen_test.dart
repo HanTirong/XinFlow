@@ -15,6 +15,7 @@ void main() {
           body: HomeScreen(
             snapshot: HomeSnapshot.preview(DateTime(2026, 9, 19, 12)),
             onAddAllocation: ([categoryId]) {},
+            onSalaryReceived: () {},
           ),
         ),
       ),

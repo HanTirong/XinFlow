@@ -7,7 +7,7 @@ import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
-enum AllocationEditorResult { created, updated, deleted }
+enum AllocationEditorResult { created, updated, deleted, refundRequested }
 
 final class AddAllocationSheet extends ConsumerStatefulWidget {
   const AddAllocationSheet({this.initialCategoryId, this.entry, super.key});
@@ -285,6 +285,17 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
                 ),
                 if (widget.entry != null) ...[
                   const SizedBox(height: 10),
+                  if (widget.entry!.flowType == FlowType.expense)
+                    OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => Navigator.of(
+                              context,
+                            ).pop(AllocationEditorResult.refundRequested),
+                      icon: const Icon(Icons.currency_exchange_rounded),
+                      label: const Text('记录退款'),
+                    ),
+                  const SizedBox(height: 4),
                   TextButton.icon(
                     onPressed: _isSaving ? null : _delete,
                     icon: const Icon(Icons.delete_outline_rounded),

@@ -13,11 +13,13 @@ final class HomeScreen extends StatelessWidget {
   const HomeScreen({
     required this.snapshot,
     required this.onAddAllocation,
+    required this.onSalaryReceived,
     super.key,
   });
 
   final HomeSnapshot snapshot;
   final AddAllocationCallback onAddAllocation;
+  final VoidCallback onSalaryReceived;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -30,7 +32,10 @@ final class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
               sliver: SliverList.list(
                 children: [
-                  _Header(snapshot: snapshot),
+                  _Header(
+                    snapshot: snapshot,
+                    onSalaryReceived: onSalaryReceived,
+                  ),
                   const SizedBox(height: 20),
                   _SalaryCard(snapshot: snapshot),
                   const SizedBox(height: 16),
@@ -51,9 +56,10 @@ final class HomeScreen extends StatelessWidget {
 }
 
 final class _Header extends StatelessWidget {
-  const _Header({required this.snapshot});
+  const _Header({required this.snapshot, required this.onSalaryReceived});
 
   final HomeSnapshot snapshot;
+  final VoidCallback onSalaryReceived;
 
   @override
   Widget build(BuildContext context) {
@@ -86,8 +92,8 @@ final class _Header extends StatelessWidget {
           ),
         ),
         IconButton(
-          tooltip: '查看工资周期',
-          onPressed: () => _showPendingMessage(context, '工资周期页面'),
+          tooltip: '确认工资到账',
+          onPressed: onSalaryReceived,
           icon: const Icon(Icons.calendar_month_outlined),
         ),
       ],

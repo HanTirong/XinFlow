@@ -110,6 +110,12 @@ final class _FakeTransactionRepository implements TransactionRepository {
   }
 
   @override
+  Future<List<TransactionEntry>> listRefundsFor(String transactionId) async =>
+      entries
+          .where((entry) => entry.reversesTransactionId == transactionId)
+          .toList(growable: false);
+
+  @override
   Future<void> add(TransactionEntry entry) => throw UnimplementedError();
 
   @override

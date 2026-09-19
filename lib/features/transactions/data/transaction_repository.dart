@@ -7,6 +7,8 @@ abstract interface class TransactionRepository {
 
   Future<TransactionEntry?> getById(String transactionId);
 
+  Future<List<TransactionEntry>> listRefundsFor(String transactionId);
+
   Future<void> add(TransactionEntry entry);
 
   Future<void> update(TransactionEntry entry);
