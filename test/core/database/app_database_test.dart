@@ -14,6 +14,8 @@ import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/settings/data/drift_settings_repository.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
 import 'package:xinflow/features/transactions/application/create_allocation.dart';
+import 'package:xinflow/features/transactions/application/delete_allocation.dart';
+import 'package:xinflow/features/transactions/application/update_allocation.dart';
 import 'package:xinflow/features/transactions/data/drift_transaction_repository.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
@@ -226,6 +228,74 @@ void main() {
       throwsArgumentError,
     );
     expect(await database.select(database.transactionRecords).get(), isEmpty);
+  });
+
+  test('updates and soft-deletes a current-cycle allocation', () async {
+    final fixedClock = _FixedClock(DateTime.utc(2026, 9, 20, 8, 30));
+    await CompleteOnboarding(
+      repository: repository,
+      clock: fixedClock,
+      idGenerator: const _FixedIdGenerator('cycle-initial'),
+    ).execute(salaryDay: 10, salaryCents: 1300000);
+
+    final categories = DriftCategoryRepository(database);
+    final salaryCycles = DriftSalaryCycleRepository(database);
+    final transactions = DriftTransactionRepository(
+      database,
+      clock: fixedClock,
+    );
+    await CreateAllocation(
+      categories: categories,
+      salaryCycles: salaryCycles,
+      transactions: transactions,
+      clock: fixedClock,
+      idGenerator: const _FixedIdGenerator('transaction-1'),
+    ).execute(amountCents: 6600, categoryId: DefaultCategoryIds.food);
+
+    final updated =
+        await UpdateAllocation(
+          categories: categories,
+          salaryCycles: salaryCycles,
+          transactions: transactions,
+        ).execute(
+          transactionId: 'transaction-1',
+          amountCents: 8800,
+          categoryId: DefaultCategoryIds.shopping,
+          subcategoryId: 'builtin.shopping.1',
+          occurredOn: const LocalDate(2026, 9, 18),
+          note: '生活用品',
+        );
+    expect(updated.amountCents, 8800);
+    expect(updated.categoryId, DefaultCategoryIds.shopping);
+    expect((await transactions.getById('transaction-1'))!.note, '生活用品');
+
+    await transactions.add(
+      TransactionEntry(
+        id: 'refund-1',
+        salaryCycleId: 'cycle-initial',
+        entryKind: EntryKind.refund,
+        flowType: FlowType.expense,
+        amountCents: 2000,
+        categoryId: DefaultCategoryIds.shopping,
+        subcategoryId: 'builtin.shopping.1',
+        reversesTransactionId: 'transaction-1',
+        occurredAt: fixedClock.now(),
+        occurredOn: const LocalDate(2026, 9, 20),
+      ),
+    );
+
+    await DeleteAllocation(
+      salaryCycles: salaryCycles,
+      transactions: transactions,
+      clock: fixedClock,
+    ).execute('transaction-1');
+
+    final rows = await transactions.listCycleTransactions('cycle-initial');
+    expect(rows, hasLength(2));
+    expect(
+      rows,
+      everyElement(predicate<TransactionEntry>((row) => row.isDeleted)),
+    );
   });
 
   test(

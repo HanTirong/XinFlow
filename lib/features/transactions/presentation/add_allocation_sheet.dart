@@ -5,11 +5,15 @@ import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+
+enum AllocationEditorResult { created, updated, deleted }
 
 final class AddAllocationSheet extends ConsumerStatefulWidget {
-  const AddAllocationSheet({this.initialCategoryId, super.key});
+  const AddAllocationSheet({this.initialCategoryId, this.entry, super.key});
 
   final String? initialCategoryId;
+  final TransactionEntry? entry;
 
   @override
   ConsumerState<AddAllocationSheet> createState() => _AddAllocationSheetState();
@@ -17,8 +21,8 @@ final class AddAllocationSheet extends ConsumerStatefulWidget {
 
 final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
+  late final TextEditingController _amountController;
+  late final TextEditingController _noteController;
   String? _categoryId;
   String? _subcategoryId;
   late LocalDate _occurredOn;
@@ -28,8 +32,20 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
   @override
   void initState() {
     super.initState();
-    _categoryId = widget.initialCategoryId;
-    _occurredOn = LocalDate.fromDateTime(ref.read(clockProvider).now());
+    final entry = widget.entry;
+    _amountController = TextEditingController(
+      text: entry == null
+          ? ''
+          : Money.fromCents(
+              entry.amountCents,
+            ).format(symbol: '', alwaysShowCents: true),
+    );
+    _noteController = TextEditingController(text: entry?.note ?? '');
+    _categoryId = entry?.categoryId ?? widget.initialCategoryId;
+    _subcategoryId = entry?.subcategoryId;
+    _occurredOn =
+        entry?.occurredOn ??
+        LocalDate.fromDateTime(ref.read(clockProvider).now());
   }
 
   @override
@@ -49,7 +65,7 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       context: context,
       initialDate: initial,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      lastDate: ref.read(clockProvider).now().add(const Duration(days: 1)),
     );
     if (selected != null && mounted) {
       setState(() => _occurredOn = LocalDate.fromDateTime(selected));
@@ -68,16 +84,36 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       _errorMessage = null;
     });
     try {
-      await ref
-          .read(createAllocationProvider)
-          .execute(
-            amountCents: Money.parse(_amountController.text).cents,
-            categoryId: _categoryId!,
-            subcategoryId: _subcategoryId,
-            occurredOn: _occurredOn,
-            note: _noteController.text,
-          );
-      if (mounted) Navigator.of(context).pop(true);
+      final entry = widget.entry;
+      if (entry == null) {
+        await ref
+            .read(createAllocationProvider)
+            .execute(
+              amountCents: Money.parse(_amountController.text).cents,
+              categoryId: _categoryId!,
+              subcategoryId: _subcategoryId,
+              occurredOn: _occurredOn,
+              note: _noteController.text,
+            );
+      } else {
+        await ref
+            .read(updateAllocationProvider)
+            .execute(
+              transactionId: entry.id,
+              amountCents: Money.parse(_amountController.text).cents,
+              categoryId: _categoryId!,
+              subcategoryId: _subcategoryId,
+              occurredOn: _occurredOn,
+              note: _noteController.text,
+            );
+      }
+      if (mounted) {
+        Navigator.of(context).pop(
+          entry == null
+              ? AllocationEditorResult.created
+              : AllocationEditorResult.updated,
+        );
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -87,6 +123,46 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
           ArgumentError(:final message) => message?.toString(),
           _ => '保存失败，请稍后重试。',
         };
+      });
+    }
+  }
+
+  Future<void> _delete() async {
+    final entry = widget.entry;
+    if (entry == null || _isSaving) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除这笔流水？'),
+        content: const Text('删除后将从当前周期汇总中移除，但会保留软删除记录。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref.read(deleteAllocationProvider).execute(entry.id);
+      if (mounted) {
+        Navigator.of(context).pop(AllocationEditorResult.deleted);
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorMessage = '删除失败：$error';
       });
     }
   }
@@ -119,7 +195,10 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                Text('记一笔', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  widget.entry == null ? '记一笔' : '编辑流水',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 18),
                 TextFormField(
                   controller: _amountController,
@@ -196,8 +275,25 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.check_rounded),
-                  label: Text(_isSaving ? '正在保存…' : '保存'),
+                  label: Text(
+                    _isSaving
+                        ? '正在保存…'
+                        : widget.entry == null
+                        ? '保存'
+                        : '保存修改',
+                  ),
                 ),
+                if (widget.entry != null) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: _isSaving ? null : _delete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('删除流水'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

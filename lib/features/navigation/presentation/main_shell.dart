@@ -4,6 +4,8 @@ import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/features/home/presentation/home_screen.dart';
 import 'package:xinflow/features/settings/presentation/settings_screen.dart';
 import 'package:xinflow/features/transactions/presentation/add_allocation_sheet.dart';
+import 'package:xinflow/features/transactions/presentation/transactions_screen.dart';
+import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 import 'package:xinflow/shared/presentation/placeholder_page.dart';
 
 final class MainShell extends ConsumerStatefulWidget {
@@ -29,11 +31,7 @@ final class _MainShellState extends ConsumerState<MainShell> {
         data: (snapshot) =>
             HomeScreen(snapshot: snapshot, onAddAllocation: _openAddAllocation),
       ),
-      const PlaceholderPage(
-        icon: Icons.receipt_long_outlined,
-        title: '流水',
-        description: '流水列表将在 M2 接入现有数据库。',
-      ),
+      TransactionsScreen(onEdit: _openEditAllocation),
       const PlaceholderPage(
         icon: Icons.pie_chart_outline_rounded,
         title: '月报',
@@ -44,7 +42,7 @@ final class _MainShellState extends ConsumerState<MainShell> {
 
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
-      floatingActionButton: _selectedIndex == 0
+      floatingActionButton: _selectedIndex == 0 || _selectedIndex == 1
           ? FloatingActionButton.extended(
               onPressed: _openAddAllocation,
               icon: const Icon(Icons.add_rounded),
@@ -81,18 +79,35 @@ final class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Future<void> _openAddAllocation([String? categoryId]) async {
-    final created = await showModalBottomSheet<bool>(
+  Future<void> _openAddAllocation([String? categoryId]) =>
+      _openAllocationEditor(initialCategoryId: categoryId);
+
+  Future<void> _openEditAllocation(TransactionEntry entry) =>
+      _openAllocationEditor(entry: entry);
+
+  Future<void> _openAllocationEditor({
+    String? initialCategoryId,
+    TransactionEntry? entry,
+  }) async {
+    final result = await showModalBottomSheet<AllocationEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: false,
-      builder: (context) => AddAllocationSheet(initialCategoryId: categoryId),
+      builder: (context) => AddAllocationSheet(
+        initialCategoryId: initialCategoryId,
+        entry: entry,
+      ),
     );
-    if (created == true && mounted) {
+    if (result != null && mounted) {
+      final message = switch (result) {
+        AllocationEditorResult.created => '已记入本期工资流向。',
+        AllocationEditorResult.updated => '流水修改已保存。',
+        AllocationEditorResult.deleted => '流水已删除，余额已重新计算。',
+      };
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('已记入本期工资流向。')));
+        ..showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }

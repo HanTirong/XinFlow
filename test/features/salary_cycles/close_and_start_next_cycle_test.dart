@@ -102,6 +102,14 @@ final class _FakeTransactionRepository implements TransactionRepository {
   final List<TransactionEntry> entries;
 
   @override
+  Future<TransactionEntry?> getById(String transactionId) async {
+    for (final entry in entries) {
+      if (entry.id == transactionId) return entry;
+    }
+    return null;
+  }
+
+  @override
   Future<void> add(TransactionEntry entry) => throw UnimplementedError();
 
   @override
@@ -113,6 +121,12 @@ final class _FakeTransactionRepository implements TransactionRepository {
 
   @override
   Future<void> softDelete({
+    required String transactionId,
+    required DateTime deletedAt,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> softDeleteAllocationGroup({
     required String transactionId,
     required DateTime deletedAt,
   }) => throw UnimplementedError();

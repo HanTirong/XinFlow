@@ -67,6 +67,41 @@ void main() {
     expect(cycles, hasLength(1));
     expect(transactions, hasLength(1));
 
+    await tester.tap(find.text('流水'));
+    await tester.pumpAndSettle();
+    expect(find.text('当前周期流水'), findsOneWidget);
+    expect(find.text('- ¥28.60'), findsOneWidget);
+
+    await tester.tap(find.text('饮食'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑流水'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, '金额'), '30.60');
+    await tester.tap(find.widgetWithText(FilledButton, '保存修改'));
+    await tester.pumpAndSettle();
+    expect(find.text('- ¥30.60'), findsOneWidget);
+    expect(find.text('流水修改已保存。'), findsOneWidget);
+
+    await tester.tap(find.text('饮食'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除流水'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除这笔流水？'), findsOneWidget);
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('还没有流水'), findsOneWidget);
+    expect(find.text('流水已删除，余额已重新计算。'), findsOneWidget);
+
+    final deletedTransaction = await database
+        .select(database.transactionRecords)
+        .getSingle();
+    expect(deletedTransaction.deletedAt, isNotNull);
+
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    expect(find.text('¥8,500'), findsNWidgets(2));
+
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     expect(find.text('外观'), findsOneWidget);

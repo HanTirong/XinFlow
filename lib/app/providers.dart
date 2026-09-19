@@ -16,9 +16,12 @@ import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart
 import 'package:xinflow/features/settings/data/drift_settings_repository.dart';
 import 'package:xinflow/features/settings/data/settings_repository.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
+import 'package:xinflow/features/transactions/application/create_allocation.dart';
+import 'package:xinflow/features/transactions/application/delete_allocation.dart';
+import 'package:xinflow/features/transactions/application/update_allocation.dart';
 import 'package:xinflow/features/transactions/data/drift_transaction_repository.dart';
 import 'package:xinflow/features/transactions/data/transaction_repository.dart';
-import 'package:xinflow/features/transactions/application/create_allocation.dart';
+import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
@@ -61,6 +64,42 @@ final createAllocationProvider = Provider<CreateAllocation>(
     clock: ref.watch(clockProvider),
     idGenerator: ref.watch(idGeneratorProvider),
   ),
+);
+
+final updateAllocationProvider = Provider<UpdateAllocation>(
+  (ref) => UpdateAllocation(
+    categories: ref.watch(categoryRepositoryProvider),
+    salaryCycles: ref.watch(salaryCycleRepositoryProvider),
+    transactions: ref.watch(transactionRepositoryProvider),
+  ),
+);
+
+final deleteAllocationProvider = Provider<DeleteAllocation>(
+  (ref) => DeleteAllocation(
+    salaryCycles: ref.watch(salaryCycleRepositoryProvider),
+    transactions: ref.watch(transactionRepositoryProvider),
+    clock: ref.watch(clockProvider),
+  ),
+);
+
+final currentCycleTransactionsProvider = StreamProvider<List<TransactionEntry>>(
+  (ref) async* {
+    final cycle = await ref
+        .watch(salaryCycleRepositoryProvider)
+        .getActiveCycle();
+    if (cycle == null) {
+      yield const [];
+      return;
+    }
+    yield* ref
+        .watch(transactionRepositoryProvider)
+        .watchCycleTransactions(cycle.id)
+        .map(
+          (entries) => entries
+              .where((entry) => !entry.isDeleted)
+              .toList(growable: false),
+        );
+  },
 );
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(

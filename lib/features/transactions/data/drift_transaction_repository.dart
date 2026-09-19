@@ -37,6 +37,14 @@ final class DriftTransactionRepository implements TransactionRepository {
   }
 
   @override
+  Future<TransactionEntry?> getById(String transactionId) async {
+    final row = await (_database.select(
+      _database.transactionRecords,
+    )..where((row) => row.id.equals(transactionId))).getSingleOrNull();
+    return row?.toDomain();
+  }
+
+  @override
   Future<void> add(TransactionEntry entry) async {
     final now = clock.now().toUtc().millisecondsSinceEpoch;
     await _database
@@ -107,4 +115,41 @@ final class DriftTransactionRepository implements TransactionRepository {
       throw StateError('要删除的流水不存在或已经删除。');
     }
   }
+
+  @override
+  Future<void> softDeleteAllocationGroup({
+    required String transactionId,
+    required DateTime deletedAt,
+  }) => _database.transaction(() async {
+    final timestamp = deletedAt.toUtc().millisecondsSinceEpoch;
+    final originalRows =
+        await (_database.update(_database.transactionRecords)..where(
+              (row) =>
+                  row.id.equals(transactionId) &
+                  row.entryKind.equals(EntryKind.allocation.name) &
+                  row.deletedAt.isNull(),
+            ))
+            .write(
+              TransactionRecordsCompanion(
+                deletedAt: Value(timestamp),
+                updatedAt: Value(timestamp),
+              ),
+            );
+    if (originalRows != 1) {
+      throw StateError('要删除的流水不存在或已经删除。');
+    }
+
+    await (_database.update(_database.transactionRecords)..where(
+          (row) =>
+              row.reversesTransactionId.equals(transactionId) &
+              row.entryKind.equals(EntryKind.refund.name) &
+              row.deletedAt.isNull(),
+        ))
+        .write(
+          TransactionRecordsCompanion(
+            deletedAt: Value(timestamp),
+            updatedAt: Value(timestamp),
+          ),
+        );
+  });
 }
