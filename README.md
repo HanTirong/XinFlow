@@ -111,20 +111,23 @@ V1 暂不包含：
 - [x] 建立 Flutter/Dart 源码、Lint 与测试目录骨架
 - [x] 编写金额、发薪日、周期切换、退款和默认分类规则
 - [x] 编写首页预览 UI 与四栏底部导航
-- [ ] 安装 Flutter 后生成 Android/iOS 平台工程
-- [ ] 运行静态检查、单元测试和 Widget 测试
+- [x] 生成 Android/iOS 平台工程
+- [x] 通过静态检查、单元测试和 Widget 测试
+- [x] 构建 Android Debug APK 并完成 Android 16 真机启动冒烟测试
 - [ ] 实现数据库与工资周期
 - [ ] 实现首页和流水
 - [ ] 实现月报
 - [ ] 实现备份恢复
-- [ ] Android 与 iOS 真机验收
+- [ ] Android 完整交互验收与 iOS 真机验收
 
-仓库已包含第一批 Flutter 源码和测试，但当前开发电脑尚未安装 Flutter、Dart、Android SDK，因此这些代码还没有完成依赖解析、静态检查、测试或编译验证。首页当前使用有明确标识的预览数据，尚未接入数据库。
+仓库已包含第一批 Flutter 源码和测试。当前代码已在 Flutter 3.47.3、Dart 3.13.3、Android SDK 36 和 Android 16 真机环境完成依赖解析、静态检查、22 项自动化测试、Debug APK 构建及首页启动验证。首页当前使用有明确标识的预览数据，尚未接入数据库。
 
 ## 仓库结构
 
 ```text
 XinFlow/
+├─ android/                       Android 平台工程
+├─ ios/                           iOS 平台工程
 ├─ lib/                           Flutter 与领域层源码
 ├─ test/                          单元测试和 Widget 测试
 ├─ docs/
@@ -165,23 +168,24 @@ XinFlow/
 
 ## 开发状态说明
 
-本仓库暂未发布可安装版本，也尚未开放稳定 API。
+本仓库暂未发布正式版本，也尚未开放稳定 API。
 
-安装 Flutter 和 Android 开发环境后，首先执行并核对：
+安装 Flutter 和 Android 开发环境后，可执行：
 
 ```powershell
 flutter doctor -v
-flutter create . --platforms=android,ios --org=com.hantirong --project-name=xinflow
 flutter pub get
 flutter analyze
 flutter test
+flutter build apk --debug
+flutter run
 ```
 
-运行 `flutter create .` 前必须先确保当前代码已经提交或备份；命令执行后要检查 Git diff，确认平台工程生成过程没有覆盖手写文件。之后还需要补充：
+Android 构建需要安装与当前 Flutter 版本匹配的 SDK 与 NDK；本项目当前使用 NDK `28.2.13676358`。iOS 编译和真机运行仍需在 macOS 与 Xcode 环境中验证。之后还需要补充：
 
 - Flutter 和 Dart 环境要求
 - 本地运行命令
-- Android/iOS 构建步骤
+- Release 构建与签名步骤
 - 测试和静态检查命令
 - 发布与签名注意事项
 

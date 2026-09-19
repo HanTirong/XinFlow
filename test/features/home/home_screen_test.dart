@@ -24,6 +24,10 @@ void main() {
     expect(find.text('快速记一笔'), findsOneWidget);
     expect(find.text('饮食'), findsOneWidget);
     expect(find.text('存款'), findsOneWidget);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+
     expect(find.text('最近记录'), findsOneWidget);
   });
 }
