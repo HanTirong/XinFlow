@@ -3,13 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xinflow/core/clock/clock.dart';
 import 'package:xinflow/core/database/app_database.dart';
 import 'package:xinflow/core/id/id_generator.dart';
+import 'package:xinflow/core/date/local_date.dart';
+import 'package:xinflow/features/categories/data/drift_category_repository.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
 import 'package:xinflow/features/onboarding/application/complete_onboarding.dart';
 import 'package:xinflow/features/onboarding/data/drift_onboarding_repository.dart';
 import 'package:xinflow/features/salary_cycles/application/close_and_start_next_cycle.dart';
 import 'package:xinflow/features/salary_cycles/data/drift_salary_cycle_repository.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/settings/data/drift_settings_repository.dart';
+import 'package:xinflow/features/settings/domain/app_settings.dart';
+import 'package:xinflow/features/transactions/application/create_allocation.dart';
 import 'package:xinflow/features/transactions/data/drift_transaction_repository.dart';
+import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 void main() {
   late AppDatabase database;
@@ -85,6 +91,26 @@ void main() {
     );
   });
 
+  test('persists theme changes without altering salary settings', () async {
+    final onboarding = CompleteOnboarding(
+      repository: repository,
+      clock: _FixedClock(DateTime.utc(2026, 9, 19, 9, 30)),
+      idGenerator: const _FixedIdGenerator('cycle-initial'),
+    );
+    await onboarding.execute(salaryDay: 10, salaryCents: 1300000);
+
+    final settings = DriftSettingsRepository(database);
+    await settings.updateThemePreference(AppThemePreference.dark);
+
+    final row = await database.select(database.appSettingRecords).getSingle();
+    expect(row.themeMode, AppThemePreference.dark.name);
+    expect(row.salaryDay, 10);
+    expect(
+      (await repository.loadBootstrap()).activeCycle!.salaryCents,
+      1300000,
+    );
+  });
+
   test('database prevents a second active salary cycle', () async {
     final timestamp = DateTime.utc(2026, 9, 19).millisecondsSinceEpoch;
     await database
@@ -138,6 +164,68 @@ void main() {
           ),
       throwsA(isA<Exception>()),
     );
+  });
+
+  test(
+    'creates an allocation in the active cycle from a valid category',
+    () async {
+      final fixedClock = _FixedClock(DateTime.utc(2026, 9, 20, 8, 30));
+      await CompleteOnboarding(
+        repository: repository,
+        clock: fixedClock,
+        idGenerator: const _FixedIdGenerator('cycle-initial'),
+      ).execute(salaryDay: 10, salaryCents: 1300000);
+
+      final createAllocation = CreateAllocation(
+        categories: DriftCategoryRepository(database),
+        salaryCycles: DriftSalaryCycleRepository(database),
+        transactions: DriftTransactionRepository(database, clock: fixedClock),
+        clock: fixedClock,
+        idGenerator: const _FixedIdGenerator('transaction-1'),
+      );
+      final entry = await createAllocation.execute(
+        amountCents: 2860,
+        categoryId: DefaultCategoryIds.food,
+        subcategoryId: 'builtin.food.1',
+        occurredOn: const LocalDate(2026, 9, 18),
+        note: '午餐',
+      );
+
+      expect(entry.salaryCycleId, 'cycle-initial');
+      expect(entry.flowType, FlowType.expense);
+      expect(entry.occurredOn, const LocalDate(2026, 9, 18));
+      final rows = await database.select(database.transactionRecords).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.amountCents, 2860);
+      expect(rows.single.note, '午餐');
+    },
+  );
+
+  test('rejects a subcategory that belongs to another parent', () async {
+    final fixedClock = _FixedClock(DateTime.utc(2026, 9, 20, 8, 30));
+    await CompleteOnboarding(
+      repository: repository,
+      clock: fixedClock,
+      idGenerator: const _FixedIdGenerator('cycle-initial'),
+    ).execute(salaryDay: 10, salaryCents: 1300000);
+
+    final createAllocation = CreateAllocation(
+      categories: DriftCategoryRepository(database),
+      salaryCycles: DriftSalaryCycleRepository(database),
+      transactions: DriftTransactionRepository(database, clock: fixedClock),
+      clock: fixedClock,
+      idGenerator: const _FixedIdGenerator('transaction-1'),
+    );
+
+    await expectLater(
+      createAllocation.execute(
+        amountCents: 2860,
+        categoryId: DefaultCategoryIds.food,
+        subcategoryId: 'builtin.shopping.1',
+      ),
+      throwsArgumentError,
+    );
+    expect(await database.select(database.transactionRecords).get(), isEmpty);
   });
 
   test(

@@ -7,10 +7,17 @@ import 'package:xinflow/features/categories/domain/default_categories.dart';
 import 'package:xinflow/features/home/domain/home_snapshot.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
+typedef AddAllocationCallback = void Function([String? categoryId]);
+
 final class HomeScreen extends StatelessWidget {
-  const HomeScreen({required this.snapshot, super.key});
+  const HomeScreen({
+    required this.snapshot,
+    required this.onAddAllocation,
+    super.key,
+  });
 
   final HomeSnapshot snapshot;
+  final AddAllocationCallback onAddAllocation;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -27,7 +34,10 @@ final class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   _SalaryCard(snapshot: snapshot),
                   const SizedBox(height: 16),
-                  _ShortcutCard(shortcuts: snapshot.shortcuts),
+                  _ShortcutCard(
+                    shortcuts: snapshot.shortcuts,
+                    onAddAllocation: onAddAllocation,
+                  ),
                   const SizedBox(height: 16),
                   _RecentCard(entries: snapshot.recentTransactions),
                 ],
@@ -92,13 +102,13 @@ final class _PreviewBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: const Color(0xFFE7F0FF),
+      color: Theme.of(context).colorScheme.secondaryContainer,
       borderRadius: BorderRadius.circular(999),
     ),
-    child: const Text(
+    child: Text(
       '预览数据',
       style: TextStyle(
-        color: AppColors.primary,
+        color: Theme.of(context).colorScheme.onSecondaryContainer,
         fontSize: 11,
         fontWeight: FontWeight.w700,
       ),
@@ -113,6 +123,8 @@ final class _SalaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final summary = snapshot.summary;
     final remaining = Money.fromCents(summary.remainingCents);
     final progress = summary.remainingRatio.clamp(0.0, 1.0).toDouble();
@@ -121,13 +133,17 @@ final class _SalaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF1F7FF), Color(0xFFE4F1FF)],
+        gradient: LinearGradient(
+          colors: isDark
+              ? [colors.surfaceContainerHigh, colors.surfaceContainer]
+              : [const Color(0xFFF1F7FF), const Color(0xFFE4F1FF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFDCEAFF)),
+        border: Border.all(
+          color: isDark ? colors.outlineVariant : const Color(0xFFDCEAFF),
+        ),
       ),
       child: Column(
         children: [
@@ -150,7 +166,9 @@ final class _SalaryCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.headlineLarge
                             ?.copyWith(
                               color: isDeficit
-                                  ? AppColors.warning
+                                  ? colors.error
+                                  : isDark
+                                  ? colors.primary
                                   : AppColors.primaryDark,
                             ),
                       ),
@@ -168,17 +186,38 @@ final class _SalaryCard extends StatelessWidget {
                       value: progress,
                       strokeWidth: 9,
                       strokeCap: StrokeCap.round,
-                      backgroundColor: const Color(0xFFD4E3F5),
-                      color: isDeficit ? AppColors.warning : AppColors.primary,
+                      backgroundColor: colors.surfaceContainerHighest,
+                      color: isDeficit ? colors.error : colors.primary,
                     ),
-                    Text(
-                      '${(math.max(0, progress) * 100).round()}%\n剩余',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppColors.primaryDark,
-                        fontWeight: FontWeight.w700,
-                        height: 1.15,
-                      ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${(math.max(0, progress) * 100).round()}%',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: isDark
+                                ? colors.primary
+                                : AppColors.primaryDark,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '剩余',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: isDark
+                                ? colors.primary
+                                : AppColors.primaryDark,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -240,9 +279,10 @@ final class _Metric extends StatelessWidget {
 }
 
 final class _ShortcutCard extends StatelessWidget {
-  const _ShortcutCard({required this.shortcuts});
+  const _ShortcutCard({required this.shortcuts, required this.onAddAllocation});
 
   final List<CategoryShortcut> shortcuts;
+  final AddAllocationCallback onAddAllocation;
 
   @override
   Widget build(BuildContext context) => _SectionCard(
@@ -263,28 +303,31 @@ final class _ShortcutCard extends StatelessWidget {
           crossAxisSpacing: 12,
           childAspectRatio: 1.05,
         ),
-        itemBuilder: (context, index) =>
-            _ShortcutTile(shortcut: shortcuts[index]),
+        itemBuilder: (context, index) => _ShortcutTile(
+          shortcut: shortcuts[index],
+          onTap: () => onAddAllocation(shortcuts[index].id),
+        ),
       ),
     ),
   );
 }
 
 final class _ShortcutTile extends StatelessWidget {
-  const _ShortcutTile({required this.shortcut});
+  const _ShortcutTile({required this.shortcut, required this.onTap});
 
   final CategoryShortcut shortcut;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final appearance = _shortcutAppearance(shortcut.id);
+    final appearance = _shortcutAppearance(context, shortcut.id);
 
     return Material(
       color: appearance.background,
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _showPendingMessage(context, '${shortcut.label}记账'),
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
           child: Column(
@@ -336,7 +379,7 @@ final class _RecentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appearance = _shortcutAppearance(entry.categoryId);
+    final appearance = _shortcutAppearance(context, entry.categoryId);
     final category = _categoryLabel(entry.categoryId);
     final time = entry.occurredAt;
 
@@ -384,34 +427,42 @@ final class _SectionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(22),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0A0F172A),
-          blurRadius: 18,
-          offset: Offset(0, 7),
-        ),
-      ],
-    ),
-    child: Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-            ),
-            trailing,
-          ],
-        ),
-        const SizedBox(height: 10),
-        child,
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: isDark
+            ? const []
+            : const [
+                BoxShadow(
+                  color: Color(0x0A0F172A),
+                  blurRadius: 18,
+                  offset: Offset(0, 7),
+                ),
+              ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              trailing,
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
 }
 
 final class _ShortcutAppearance {
@@ -426,48 +477,62 @@ final class _ShortcutAppearance {
   final Color background;
 }
 
-_ShortcutAppearance _shortcutAppearance(String id) => switch (id) {
-  DefaultCategoryIds.food || 'food' => const _ShortcutAppearance(
-    icon: Icons.restaurant_rounded,
-    foreground: Color(0xFFF97355),
-    background: Color(0xFFFFF0EB),
-  ),
-  DefaultCategoryIds.shopping || 'shopping' => const _ShortcutAppearance(
-    icon: Icons.shopping_bag_rounded,
-    foreground: Color(0xFFE95786),
-    background: Color(0xFFFFEDF3),
-  ),
-  DefaultCategoryIds.housing || 'housing' => const _ShortcutAppearance(
-    icon: Icons.home_rounded,
-    foreground: Color(0xFF3B82F6),
-    background: Color(0xFFEDF5FF),
-  ),
-  DefaultCategoryIds.transport || 'transport' => const _ShortcutAppearance(
-    icon: Icons.directions_bus_rounded,
-    foreground: Color(0xFF0F9F6E),
-    background: Color(0xFFECF9F4),
-  ),
-  DefaultCategoryIds.digital || 'digital' => const _ShortcutAppearance(
-    icon: Icons.laptop_mac_rounded,
-    foreground: Color(0xFF8B5CF6),
-    background: Color(0xFFF3EFFF),
-  ),
-  DefaultCategoryIds.saving || 'saving' => const _ShortcutAppearance(
-    icon: Icons.savings_rounded,
-    foreground: Color(0xFFF59E0B),
-    background: Color(0xFFFFF6E5),
-  ),
-  DefaultCategoryIds.investment || 'investment' => const _ShortcutAppearance(
-    icon: Icons.bar_chart_rounded,
-    foreground: Color(0xFF0891B2),
-    background: Color(0xFFEAF9FC),
-  ),
-  _ => const _ShortcutAppearance(
-    icon: Icons.more_horiz_rounded,
-    foreground: Color(0xFF667085),
-    background: Color(0xFFF1F3F6),
-  ),
-};
+_ShortcutAppearance _shortcutAppearance(BuildContext context, String id) {
+  final base = switch (id) {
+    DefaultCategoryIds.food || 'food' => const _ShortcutAppearance(
+      icon: Icons.restaurant_rounded,
+      foreground: Color(0xFFF97355),
+      background: Color(0xFFFFF0EB),
+    ),
+    DefaultCategoryIds.shopping || 'shopping' => const _ShortcutAppearance(
+      icon: Icons.shopping_bag_rounded,
+      foreground: Color(0xFFE95786),
+      background: Color(0xFFFFEDF3),
+    ),
+    DefaultCategoryIds.housing || 'housing' => const _ShortcutAppearance(
+      icon: Icons.home_rounded,
+      foreground: Color(0xFF3B82F6),
+      background: Color(0xFFEDF5FF),
+    ),
+    DefaultCategoryIds.transport || 'transport' => const _ShortcutAppearance(
+      icon: Icons.directions_bus_rounded,
+      foreground: Color(0xFF0F9F6E),
+      background: Color(0xFFECF9F4),
+    ),
+    DefaultCategoryIds.digital || 'digital' => const _ShortcutAppearance(
+      icon: Icons.laptop_mac_rounded,
+      foreground: Color(0xFF8B5CF6),
+      background: Color(0xFFF3EFFF),
+    ),
+    DefaultCategoryIds.saving || 'saving' => const _ShortcutAppearance(
+      icon: Icons.savings_rounded,
+      foreground: Color(0xFFF59E0B),
+      background: Color(0xFFFFF6E5),
+    ),
+    DefaultCategoryIds.investment || 'investment' => const _ShortcutAppearance(
+      icon: Icons.bar_chart_rounded,
+      foreground: Color(0xFF0891B2),
+      background: Color(0xFFEAF9FC),
+    ),
+    _ => const _ShortcutAppearance(
+      icon: Icons.more_horiz_rounded,
+      foreground: Color(0xFF667085),
+      background: Color(0xFFF1F3F6),
+    ),
+  };
+  if (Theme.of(context).brightness != Brightness.dark) {
+    return base;
+  }
+  final foreground = Color.lerp(base.foreground, Colors.white, 0.18)!;
+  return _ShortcutAppearance(
+    icon: base.icon,
+    foreground: foreground,
+    background: Color.alphaBlend(
+      base.foreground.withAlpha(42),
+      Theme.of(context).colorScheme.surfaceContainerHigh,
+    ),
+  );
+}
 
 String _categoryLabel(String id) => switch (id) {
   DefaultCategoryIds.food || 'food' => '饮食 / 外食',

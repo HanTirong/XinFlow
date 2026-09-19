@@ -25,6 +25,9 @@ final class TransactionEntry {
     if (amountCents <= 0) {
       throw ArgumentError.value(amountCents, 'amountCents', '金额必须大于 0。');
     }
+    if (note != null && note!.length > 200) {
+      throw ArgumentError.value(note, 'note', '备注不能超过 200 个字符。');
+    }
     if (entryKind == EntryKind.refund) {
       if (flowType != FlowType.expense || reversesTransactionId == null) {
         throw ArgumentError('退款必须属于消费，并关联原消费记录。');

@@ -14,6 +14,7 @@ void main() {
         home: Scaffold(
           body: HomeScreen(
             snapshot: HomeSnapshot.preview(DateTime(2026, 9, 19, 12)),
+            onAddAllocation: ([categoryId]) {},
           ),
         ),
       ),
@@ -21,6 +22,7 @@ void main() {
 
     expect(find.text('本期工资剩余'), findsOneWidget);
     expect(find.text('¥6,380'), findsOneWidget);
+    expect(find.text('38%'), findsOneWidget);
     expect(find.text('快速记一笔'), findsOneWidget);
     expect(find.text('饮食'), findsOneWidget);
     expect(find.text('存款'), findsOneWidget);

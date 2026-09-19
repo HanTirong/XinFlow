@@ -4,6 +4,7 @@ import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/features/navigation/presentation/main_shell.dart';
 import 'package:xinflow/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:xinflow/features/settings/domain/app_settings.dart';
 
 final class XinFlowApp extends ConsumerWidget {
   const XinFlowApp({super.key});
@@ -11,11 +12,21 @@ final class XinFlowApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final startup = ref.watch(startupProvider);
+    final themePreference = switch (ref.watch(themePreferenceProvider)) {
+      AsyncData(:final value) => value,
+      _ => AppThemePreference.system,
+    };
 
     return MaterialApp(
       title: '薪流',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: switch (themePreference) {
+        AppThemePreference.light => ThemeMode.light,
+        AppThemePreference.dark => ThemeMode.dark,
+        _ => ThemeMode.system,
+      },
       home: startup.when(
         loading: () => const _StartupLoading(),
         error: (error, stackTrace) => _StartupError(

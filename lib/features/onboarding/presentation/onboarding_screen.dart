@@ -82,7 +82,7 @@ final class _OnboardingScreenState extends State<OnboardingScreen> {
                   Text(
                     '这些信息只保存在你的设备中。发薪日仅用于预计日期，不会自动切换工资周期。',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.secondaryText,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       height: 1.5,
                     ),
                   ),
@@ -132,7 +132,9 @@ final class _OnboardingScreenState extends State<OnboardingScreen> {
                     const SizedBox(height: 16),
                     Text(
                       _errorMessage!,
-                      style: const TextStyle(color: AppColors.warning),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 28),

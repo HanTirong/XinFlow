@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/features/home/presentation/home_screen.dart';
+import 'package:xinflow/features/settings/presentation/settings_screen.dart';
+import 'package:xinflow/features/transactions/presentation/add_allocation_sheet.dart';
 import 'package:xinflow/shared/presentation/placeholder_page.dart';
 
 final class MainShell extends ConsumerStatefulWidget {
@@ -24,7 +26,8 @@ final class _MainShellState extends ConsumerState<MainShell> {
           message: error.toString(),
           onRetry: () => ref.invalidate(homeSnapshotProvider),
         ),
-        data: (snapshot) => HomeScreen(snapshot: snapshot),
+        data: (snapshot) =>
+            HomeScreen(snapshot: snapshot, onAddAllocation: _openAddAllocation),
       ),
       const PlaceholderPage(
         icon: Icons.receipt_long_outlined,
@@ -36,22 +39,14 @@ final class _MainShellState extends ConsumerState<MainShell> {
         title: '月报',
         description: '这里将展示一个完整工资周期的数据。',
       ),
-      const PlaceholderPage(
-        icon: Icons.person_outline_rounded,
-        title: '我的',
-        description: '发薪日、分类、备份与恢复设置将在这里管理。',
-      ),
+      const SettingsScreen(),
     ];
 
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
-              onPressed: () {
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(const SnackBar(content: Text('记一笔将在 M2 开放。')));
-              },
+              onPressed: _openAddAllocation,
               icon: const Icon(Icons.add_rounded),
               label: const Text('记一笔'),
             )
@@ -84,6 +79,21 @@ final class _MainShellState extends ConsumerState<MainShell> {
         ],
       ),
     );
+  }
+
+  Future<void> _openAddAllocation([String? categoryId]) async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: false,
+      builder: (context) => AddAllocationSheet(initialCategoryId: categoryId),
+    );
+    if (created == true && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('已记入本期工资流向。')));
+    }
   }
 }
 
