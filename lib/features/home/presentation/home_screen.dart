@@ -1,11 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/core/money/money.dart';
-import 'package:xinflow/features/categories/domain/default_categories.dart';
+import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/categories/presentation/category_visual_config.dart';
 import 'package:xinflow/features/home/domain/home_snapshot.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+import 'package:xinflow/features/transactions/presentation/transaction_amount_formatter.dart';
 
 typedef AddAllocationCallback = void Function([String? categoryId]);
 
@@ -14,12 +13,22 @@ final class HomeScreen extends StatelessWidget {
     required this.snapshot,
     required this.onAddAllocation,
     required this.onSalaryReceived,
+    required this.onBrowseCycles,
+    required this.onEditCategories,
+    required this.onViewAllTransactions,
+    required this.onEditTransaction,
+    this.categories = const [],
     super.key,
   });
 
   final HomeSnapshot snapshot;
   final AddAllocationCallback onAddAllocation;
   final VoidCallback onSalaryReceived;
+  final VoidCallback onBrowseCycles;
+  final VoidCallback onEditCategories;
+  final VoidCallback onViewAllTransactions;
+  final ValueChanged<TransactionEntry> onEditTransaction;
+  final List<Category> categories;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -29,22 +38,41 @@ final class HomeScreen extends StatelessWidget {
         child: CustomScrollView(
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
               sliver: SliverList.list(
                 children: [
-                  _Header(
+                  _Header(snapshot: snapshot, onBrowseCycles: onBrowseCycles),
+                  const SizedBox(height: 18),
+                  _SalaryCard(
                     snapshot: snapshot,
                     onSalaryReceived: onSalaryReceived,
                   ),
-                  const SizedBox(height: 20),
-                  _SalaryCard(snapshot: snapshot),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _ShortcutCard(
                     shortcuts: snapshot.shortcuts,
+                    categories: categories,
                     onAddAllocation: onAddAllocation,
+                    onEditCategories: onEditCategories,
                   ),
-                  const SizedBox(height: 16),
-                  _RecentCard(entries: snapshot.recentTransactions),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: onAddAllocation,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('记一笔'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _RecentCard(
+                    entries: snapshot.recentTransactions,
+                    categories: categories,
+                    onViewAll: onViewAllTransactions,
+                    onEdit: onEditTransaction,
+                  ),
                 ],
               ),
             ),
@@ -56,18 +84,18 @@ final class HomeScreen extends StatelessWidget {
 }
 
 final class _Header extends StatelessWidget {
-  const _Header({required this.snapshot, required this.onSalaryReceived});
+  const _Header({required this.snapshot, required this.onBrowseCycles});
 
   final HomeSnapshot snapshot;
-  final VoidCallback onSalaryReceived;
+  final VoidCallback onBrowseCycles;
 
   @override
   Widget build(BuildContext context) {
     final start = snapshot.cycle.startedAt;
     final expected = snapshot.cycle.expectedPayDate;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Column(
@@ -83,17 +111,32 @@ final class _Header extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                '当前工资周期：${start.month}月${start.day}日'
-                ' - ${expected.month}月${expected.day}日',
-                style: Theme.of(context).textTheme.bodyMedium,
+              InkWell(
+                onTap: onBrowseCycles,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${start.month}月${start.day}日 - '
+                        '${expected.month}月${expected.day}日',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(color: muted),
+                      ),
+                      Icon(Icons.chevron_right_rounded, size: 18, color: muted),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
         IconButton(
-          tooltip: '确认工资到账',
-          onPressed: onSalaryReceived,
+          tooltip: '查看工资周期',
+          onPressed: onBrowseCycles,
           icon: const Icon(Icons.calendar_month_outlined),
         ),
       ],
@@ -108,13 +151,13 @@ final class _PreviewBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.secondaryContainer,
+      color: Theme.of(context).colorScheme.primaryContainer,
       borderRadius: BorderRadius.circular(999),
     ),
     child: Text(
       '预览数据',
       style: TextStyle(
-        color: Theme.of(context).colorScheme.onSecondaryContainer,
+        color: Theme.of(context).colorScheme.onPrimaryContainer,
         fontSize: 11,
         fontWeight: FontWeight.w700,
       ),
@@ -123,37 +166,29 @@ final class _PreviewBadge extends StatelessWidget {
 }
 
 final class _SalaryCard extends StatelessWidget {
-  const _SalaryCard({required this.snapshot});
+  const _SalaryCard({required this.snapshot, required this.onSalaryReceived});
 
   final HomeSnapshot snapshot;
+  final VoidCallback onSalaryReceived;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final summary = snapshot.summary;
-    final remaining = Money.fromCents(summary.remainingCents);
     final progress = summary.remainingRatio.clamp(0.0, 1.0).toDouble();
     final isDeficit = summary.remainingCents < 0;
 
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [colors.surfaceContainerHigh, colors.surfaceContainer]
-              : [const Color(0xFFF1F7FF), const Color(0xFFE4F1FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? colors.outlineVariant : const Color(0xFFDCEAFF),
-        ),
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -163,75 +198,62 @@ final class _SalaryCard extends StatelessWidget {
                       isDeficit ? '本期工资已超出' : '本期工资剩余',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        remaining.format(),
+                        Money.fromCents(summary.remainingCents).format(),
                         style: Theme.of(context).textTheme.headlineLarge
                             ?.copyWith(
-                              color: isDeficit
-                                  ? colors.error
-                                  : isDark
-                                  ? colors.primary
-                                  : AppColors.primaryDark,
+                              color: isDeficit ? colors.error : colors.primary,
                             ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 20),
-              SizedBox.square(
-                dimension: 84,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      value: progress,
-                      strokeWidth: 9,
-                      strokeCap: StrokeCap.round,
-                      backgroundColor: colors.surfaceContainerHighest,
-                      color: isDeficit ? colors.error : colors.primary,
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${(math.max(0, progress) * 100).round()}%',
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: isDark
-                                ? colors.primary
-                                : AppColors.primaryDark,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            height: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '剩余',
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: isDark
-                                ? colors.primary
-                                : AppColors.primaryDark,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+              const SizedBox(width: 12),
+              InkWell(
+                onTap: onSalaryReceived,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '距离下次发薪',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${snapshot.daysUntilPayday}天',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 22),
-          const Divider(height: 1),
+          const SizedBox(height: 18),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: colors.surfaceContainerHighest,
+              color: isDeficit ? colors.error : colors.primary,
+            ),
+          ),
           const SizedBox(height: 18),
           Row(
             children: [
@@ -243,14 +265,14 @@ final class _SalaryCard extends StatelessWidget {
               ),
               Expanded(
                 child: _Metric(
-                  label: '已分配',
+                  label: '已记录',
                   value: Money.fromCents(summary.allocatedCents).format(),
                 ),
               ),
               Expanded(
                 child: _Metric(
-                  label: '距下次发薪',
-                  value: '${snapshot.daysUntilPayday} 天',
+                  label: '剩余比例',
+                  value: '${(progress * 100).round()}%',
                 ),
               ),
             ],
@@ -273,79 +295,103 @@ final class _Metric extends StatelessWidget {
       Text(
         label,
         textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium,
+        style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: 4),
       FittedBox(
         fit: BoxFit.scaleDown,
-        child: Text(value, style: Theme.of(context).textTheme.titleMedium),
+        child: Text(value, style: Theme.of(context).textTheme.titleSmall),
       ),
     ],
   );
 }
 
 final class _ShortcutCard extends StatelessWidget {
-  const _ShortcutCard({required this.shortcuts, required this.onAddAllocation});
+  const _ShortcutCard({
+    required this.shortcuts,
+    required this.categories,
+    required this.onAddAllocation,
+    required this.onEditCategories,
+  });
 
   final List<CategoryShortcut> shortcuts;
+  final List<Category> categories;
   final AddAllocationCallback onAddAllocation;
+  final VoidCallback onEditCategories;
 
   @override
   Widget build(BuildContext context) => _SectionCard(
     title: '快速记一笔',
     trailing: TextButton(
-      onPressed: () => _showPendingMessage(context, '快捷分类管理'),
-      child: const Text('自定义'),
+      onPressed: onEditCategories,
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [Text('编辑分类'), Icon(Icons.chevron_right_rounded, size: 18)],
+      ),
     ),
-    child: LayoutBuilder(
-      builder: (context, constraints) => GridView.builder(
-        padding: EdgeInsets.zero,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: shortcuts.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: constraints.maxWidth < 340 ? 3 : 4,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.05,
-        ),
-        itemBuilder: (context, index) => _ShortcutTile(
-          shortcut: shortcuts[index],
-          onTap: () => onAddAllocation(shortcuts[index].id),
-        ),
+    child: GridView.builder(
+      padding: EdgeInsets.zero,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: shortcuts.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 9,
+        crossAxisSpacing: 9,
+        childAspectRatio: 1.08,
+      ),
+      itemBuilder: (context, index) => _ShortcutTile(
+        shortcut: shortcuts[index],
+        categories: categories,
+        onTap: () => onAddAllocation(shortcuts[index].id),
       ),
     ),
   );
 }
 
 final class _ShortcutTile extends StatelessWidget {
-  const _ShortcutTile({required this.shortcut, required this.onTap});
+  const _ShortcutTile({
+    required this.shortcut,
+    required this.categories,
+    required this.onTap,
+  });
 
   final CategoryShortcut shortcut;
+  final List<Category> categories;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final appearance = _shortcutAppearance(context, shortcut.id);
-
+    final config = CategoryVisuals.resolve(
+      categoryId: shortcut.id,
+      categories: categories,
+      fallbackName: shortcut.label,
+    );
     return Material(
-      color: appearance.background,
-      borderRadius: BorderRadius.circular(18),
+      color: config.resolvedBackgroundColor(context),
+      borderRadius: BorderRadius.circular(15),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(appearance.icon, color: appearance.foreground, size: 28),
-              const SizedBox(height: 8),
+              Icon(
+                config.icon,
+                color: config.resolvedIconColor(context),
+                size: 24,
+              ),
+              const SizedBox(height: 5),
               Text(
                 shortcut.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -356,67 +402,124 @@ final class _ShortcutTile extends StatelessWidget {
 }
 
 final class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.entries});
+  const _RecentCard({
+    required this.entries,
+    required this.categories,
+    required this.onViewAll,
+    required this.onEdit,
+  });
 
   final List<TransactionEntry> entries;
+  final List<Category> categories;
+  final VoidCallback onViewAll;
+  final ValueChanged<TransactionEntry> onEdit;
 
   @override
   Widget build(BuildContext context) => _SectionCard(
     title: '最近记录',
     trailing: TextButton(
-      onPressed: () => _showPendingMessage(context, '流水页面'),
-      child: const Text('全部记录'),
+      onPressed: onViewAll,
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [Text('全部记录'), Icon(Icons.chevron_right_rounded, size: 18)],
+      ),
     ),
-    child: Column(
-      children: [
-        for (var index = 0; index < entries.length; index++) ...[
-          _RecentRow(entry: entries[index]),
-          if (index != entries.length - 1) const Divider(height: 20),
-        ],
-      ],
-    ),
+    child: entries.isEmpty
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Text(
+              '还没有记录，先记下第一笔工资流向吧。',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          )
+        : Column(
+            children: [
+              for (var index = 0; index < entries.length; index++) ...[
+                _RecentRow(
+                  entry: entries[index],
+                  categories: categories,
+                  onTap: entries[index].entryKind == EntryKind.allocation
+                      ? () => onEdit(entries[index])
+                      : null,
+                ),
+                if (index != entries.length - 1) const Divider(height: 18),
+              ],
+            ],
+          ),
   );
 }
 
 final class _RecentRow extends StatelessWidget {
-  const _RecentRow({required this.entry});
+  const _RecentRow({required this.entry, required this.categories, this.onTap});
 
   final TransactionEntry entry;
+  final List<Category> categories;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final appearance = _shortcutAppearance(context, entry.categoryId);
-    final category = _categoryLabel(entry.categoryId);
+    final config = CategoryVisuals.resolve(
+      categoryId: entry.categoryId,
+      categories: categories,
+      fallbackType: entry.flowType,
+    );
+    final categoryById = {
+      for (final category in categories) category.id: category,
+    };
     final time = entry.occurredAt;
+    final detail = _entryDetail(entry, categoryById);
 
-    return Row(
-      children: [
-        CircleAvatar(
-          backgroundColor: appearance.background,
-          foregroundColor: appearance.foreground,
-          child: Icon(appearance.icon, size: 21),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(category, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 2),
-              Text(
-                '${time.month}月${time.day}日 '
-                '${time.hour.toString().padLeft(2, '0')}:'
-                '${time.minute.toString().padLeft(2, '0')}',
-                style: Theme.of(context).textTheme.bodyMedium,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            CategoryIconBadge(config: config),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    config.name,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  formatTransactionAmount(entry),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${time.month}月${time.day}日 '
+                  '${time.hour.toString().padLeft(2, '0')}:'
+                  '${time.minute.toString().padLeft(2, '0')}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
         ),
-        Text(
-          '- ${Money.fromCents(entry.amountCents).format()}',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -433,126 +536,41 @@ final class _SectionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: isDark
-            ? const []
-            : const [
-                BoxShadow(
-                  color: Color(0x0A0F172A),
-                  blurRadius: 18,
-                  offset: Offset(0, 7),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              trailing,
-            ],
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-final class _ShortcutAppearance {
-  const _ShortcutAppearance({
-    required this.icon,
-    required this.foreground,
-    required this.background,
-  });
-
-  final IconData icon;
-  final Color foreground;
-  final Color background;
-}
-
-_ShortcutAppearance _shortcutAppearance(BuildContext context, String id) {
-  final base = switch (id) {
-    DefaultCategoryIds.food || 'food' => const _ShortcutAppearance(
-      icon: Icons.restaurant_rounded,
-      foreground: Color(0xFFF97355),
-      background: Color(0xFFFFF0EB),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(20),
     ),
-    DefaultCategoryIds.shopping || 'shopping' => const _ShortcutAppearance(
-      icon: Icons.shopping_bag_rounded,
-      foreground: Color(0xFFE95786),
-      background: Color(0xFFFFEDF3),
-    ),
-    DefaultCategoryIds.housing || 'housing' => const _ShortcutAppearance(
-      icon: Icons.home_rounded,
-      foreground: Color(0xFF3B82F6),
-      background: Color(0xFFEDF5FF),
-    ),
-    DefaultCategoryIds.transport || 'transport' => const _ShortcutAppearance(
-      icon: Icons.directions_bus_rounded,
-      foreground: Color(0xFF0F9F6E),
-      background: Color(0xFFECF9F4),
-    ),
-    DefaultCategoryIds.digital || 'digital' => const _ShortcutAppearance(
-      icon: Icons.laptop_mac_rounded,
-      foreground: Color(0xFF8B5CF6),
-      background: Color(0xFFF3EFFF),
-    ),
-    DefaultCategoryIds.saving || 'saving' => const _ShortcutAppearance(
-      icon: Icons.savings_rounded,
-      foreground: Color(0xFFF59E0B),
-      background: Color(0xFFFFF6E5),
-    ),
-    DefaultCategoryIds.investment || 'investment' => const _ShortcutAppearance(
-      icon: Icons.bar_chart_rounded,
-      foreground: Color(0xFF0891B2),
-      background: Color(0xFFEAF9FC),
-    ),
-    _ => const _ShortcutAppearance(
-      icon: Icons.more_horiz_rounded,
-      foreground: Color(0xFF667085),
-      background: Color(0xFFF1F3F6),
-    ),
-  };
-  if (Theme.of(context).brightness != Brightness.dark) {
-    return base;
-  }
-  final foreground = Color.lerp(base.foreground, Colors.white, 0.18)!;
-  return _ShortcutAppearance(
-    icon: base.icon,
-    foreground: foreground,
-    background: Color.alphaBlend(
-      base.foreground.withAlpha(42),
-      Theme.of(context).colorScheme.surfaceContainerHigh,
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+            ),
+            trailing,
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
     ),
   );
 }
 
-String _categoryLabel(String id) => switch (id) {
-  DefaultCategoryIds.food || 'food' => '饮食 / 外食',
-  DefaultCategoryIds.shopping || 'shopping' => '购物 / 超市',
-  DefaultCategoryIds.housing || 'housing' => '住房',
-  DefaultCategoryIds.transport || 'transport' => '交通',
-  DefaultCategoryIds.digital || 'digital' => '数字服务 / AI 软件',
-  DefaultCategoryIds.saving || 'saving' => '存款',
-  DefaultCategoryIds.investment || 'investment' => '理财',
-  _ => '其他',
-};
-
-void _showPendingMessage(BuildContext context, String feature) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text('$feature将在后续里程碑接入。')));
+String _entryDetail(
+  TransactionEntry entry,
+  Map<String, Category> categoryById,
+) {
+  final subcategory = entry.subcategoryId == null
+      ? null
+      : categoryById[entry.subcategoryId!]?.name;
+  final note = entry.note?.trim();
+  if (subcategory != null && note != null && note.isNotEmpty) {
+    return '$subcategory · $note';
+  }
+  if (subcategory != null) return subcategory;
+  if (note != null && note.isNotEmpty) return note;
+  return entry.entryKind == EntryKind.refund ? '退款' : '未填写备注';
 }

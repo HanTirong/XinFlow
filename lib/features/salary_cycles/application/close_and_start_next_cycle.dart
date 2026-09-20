@@ -43,14 +43,26 @@ final class CloseAndStartNextCycle {
     );
     final confirmedAt = clock.now();
     final confirmedDate = LocalDate.fromDateTime(confirmedAt);
+    final currentStartDate = LocalDate.fromDateTime(activeCycle.startedAt);
+    var nextCycleStart = PaydayCalculator.cycleStartOnOrBefore(
+      today: confirmedDate,
+      salaryDay: salaryDay,
+    );
+    if (nextCycleStart.compareTo(currentStartDate) <= 0) {
+      nextCycleStart = activeCycle.expectedPayDate;
+    }
     final transition = SalaryCyclePolicy.closeAndStartNext(
       currentCycle: activeCycle,
       currentSummary: summary,
       newCycleId: idGenerator.next(),
       newSalaryCents: newSalaryCents,
       confirmedAt: confirmedAt,
+      newCycleStartedAt: _atStartOfDay(
+        nextCycleStart,
+        useUtc: confirmedAt.isUtc,
+      ),
       nextExpectedPayDate: PaydayCalculator.forNextCycle(
-        confirmedDate: confirmedDate,
+        confirmedDate: nextCycleStart,
         salaryDay: salaryDay,
       ),
     );
@@ -61,4 +73,8 @@ final class CloseAndStartNextCycle {
     );
     return transition;
   }
+
+  DateTime _atStartOfDay(LocalDate date, {required bool useUtc}) => useUtc
+      ? DateTime.utc(date.year, date.month, date.day)
+      : DateTime(date.year, date.month, date.day);
 }

@@ -185,7 +185,10 @@ final currentCycleTransactionsProvider = StreamProvider<List<TransactionEntry>>(
 );
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
-  (ref) => DriftSettingsRepository(ref.watch(appDatabaseProvider)),
+  (ref) => DriftSettingsRepository(
+    ref.watch(appDatabaseProvider),
+    clock: ref.watch(clockProvider),
+  ),
 );
 
 final themePreferenceProvider = StreamProvider<AppThemePreference>(

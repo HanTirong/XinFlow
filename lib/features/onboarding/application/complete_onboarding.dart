@@ -30,13 +30,17 @@ final class CompleteOnboarding {
 
     final now = clock.now();
     final confirmedDate = LocalDate.fromDateTime(now);
+    final cycleStart = PaydayCalculator.cycleStartOnOrBefore(
+      today: confirmedDate,
+      salaryDay: salaryDay,
+    );
     final settings = AppSettings(salaryDay: salaryDay, updatedAt: now);
     final initialCycle = SalaryCycle(
       id: idGenerator.next(),
       salaryCents: salaryCents,
-      startedAt: now,
+      startedAt: _atStartOfDay(cycleStart, useUtc: now.isUtc),
       expectedPayDate: PaydayCalculator.forNextCycle(
-        confirmedDate: confirmedDate,
+        confirmedDate: cycleStart,
         salaryDay: salaryDay,
       ),
       status: SalaryCycleStatus.active,
@@ -44,4 +48,8 @@ final class CompleteOnboarding {
 
     await repository.complete(settings: settings, initialCycle: initialCycle);
   }
+
+  DateTime _atStartOfDay(LocalDate date, {required bool useUtc}) => useUtc
+      ? DateTime.utc(date.year, date.month, date.day)
+      : DateTime(date.year, date.month, date.day);
 }

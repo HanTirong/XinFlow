@@ -26,6 +26,7 @@ final class SalaryCyclePolicy {
     required String newCycleId,
     required int newSalaryCents,
     required DateTime confirmedAt,
+    required DateTime newCycleStartedAt,
     required LocalDate nextExpectedPayDate,
   }) {
     if (currentCycle.status != SalaryCycleStatus.active) {
@@ -51,7 +52,7 @@ final class SalaryCyclePolicy {
     final newCycle = SalaryCycle(
       id: newCycleId,
       salaryCents: newSalaryCents,
-      startedAt: confirmedAt,
+      startedAt: newCycleStartedAt,
       expectedPayDate: nextExpectedPayDate,
       status: SalaryCycleStatus.active,
     );

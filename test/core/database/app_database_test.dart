@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xinflow/core/clock/clock.dart';
@@ -44,6 +47,59 @@ void main() {
   });
 
   test(
+    'version 2 migration aligns an existing cycle to fixed payday',
+    () async {
+      final previousWarningSetting =
+          driftRuntimeOptions.dontWarnAboutMultipleDatabases;
+      driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+      addTearDown(
+        () => driftRuntimeOptions.dontWarnAboutMultipleDatabases =
+            previousWarningSetting,
+      );
+      final directory = await Directory.systemTemp.createTemp(
+        'xinflow_migration_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/xinflow.sqlite');
+      final oldDatabase = AppDatabase.forTesting(NativeDatabase(file));
+      await CompleteOnboarding(
+        repository: DriftOnboardingRepository(oldDatabase),
+        clock: _FixedClock(DateTime(2026, 9, 19, 9, 30)),
+        idGenerator: const _FixedIdGenerator('cycle-old'),
+      ).execute(salaryDay: 10, salaryCents: 1300000);
+      await oldDatabase
+          .update(oldDatabase.salaryCycleRecords)
+          .write(
+            SalaryCycleRecordsCompanion(
+              startedAt: Value(DateTime(2026, 9, 19).millisecondsSinceEpoch),
+              expectedPayDate: const Value('2026-10-19'),
+            ),
+          );
+      await oldDatabase.customStatement('PRAGMA user_version = 1');
+      await oldDatabase.close();
+
+      final upgraded = AppDatabase.forTesting(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final bootstrap = await DriftOnboardingRepository(
+        upgraded,
+      ).loadBootstrap();
+
+      expect(
+        LocalDate.fromDateTime(bootstrap.activeCycle!.startedAt),
+        const LocalDate(2026, 9, 10),
+      );
+      expect(
+        bootstrap.activeCycle!.expectedPayDate,
+        const LocalDate(2026, 10, 10),
+      );
+      expect(
+        await upgraded.select(upgraded.salaryCycleRecords).get(),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'completes onboarding atomically and persists one active cycle',
     () async {
       final useCase = CompleteOnboarding(
@@ -60,6 +116,10 @@ void main() {
       expect(bootstrap.activeCycle!.id, 'cycle-initial');
       expect(bootstrap.activeCycle!.salaryCents, 850000);
       expect(bootstrap.activeCycle!.status, SalaryCycleStatus.active);
+      expect(
+        LocalDate.fromDateTime(bootstrap.activeCycle!.startedAt),
+        const LocalDate(2026, 9, 15),
+      );
       expect(bootstrap.activeCycle!.expectedPayDate.toString(), '2026-10-15');
 
       expect(
@@ -124,9 +184,18 @@ void main() {
       idGenerator: const _FixedIdGenerator('cycle-initial'),
     ).execute(salaryDay: 10, salaryCents: 1300000);
 
-    final settings = DriftSettingsRepository(database);
+    final settings = DriftSettingsRepository(database, clock: clock);
     await settings.updateSalaryDay(28);
     expect((await settings.load()).salaryDay, 28);
+    final realigned = await repository.loadBootstrap();
+    expect(
+      LocalDate.fromDateTime(realigned.activeCycle!.startedAt),
+      const LocalDate(2026, 8, 28),
+    );
+    expect(
+      realigned.activeCycle!.expectedPayDate,
+      const LocalDate(2026, 9, 28),
+    );
 
     final categories = DriftCategoryRepository(database);
     await categories.add(

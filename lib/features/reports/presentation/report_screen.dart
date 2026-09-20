@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/categories/presentation/category_visual_config.dart';
 import 'package:xinflow/features/reports/domain/cycle_report.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/salary_cycles/presentation/cycle_picker_sheet.dart';
 
 final class ReportScreen extends ConsumerStatefulWidget {
   const ReportScreen({super.key});
@@ -47,18 +49,9 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: DropdownButtonFormField<String>(
-                  initialValue: selected.id,
-                  decoration: const InputDecoration(labelText: '工资周期'),
-                  items: [
-                    for (final cycle in cycles)
-                      DropdownMenuItem(
-                        value: cycle.id,
-                        child: Text(_cycleLabel(cycle)),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _selectedCycleId = value),
+                child: SalaryCycleSelector(
+                  cycle: selected,
+                  onTap: () => _chooseCycle(cycles, selected),
                 ),
               ),
               const SizedBox(height: 10),
@@ -77,6 +70,20 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _chooseCycle(
+    List<SalaryCycle> cycles,
+    SalaryCycle selected,
+  ) async {
+    final cycleId = await showSalaryCyclePicker(
+      context: context,
+      cycles: cycles,
+      selectedCycleId: selected.id,
+    );
+    if (cycleId != null && mounted) {
+      setState(() => _selectedCycleId = cycleId);
+    }
   }
 }
 
@@ -125,7 +132,11 @@ final class _ReportBody extends StatelessWidget {
                   children: [
                     for (final entry in expenseEntries)
                       _CategoryBar(
-                        label: categoryById[entry.key]?.name ?? '未知分类',
+                        config: CategoryVisuals.resolve(
+                          categoryId: entry.key,
+                          categories: categories,
+                          fallbackName: categoryById[entry.key]?.name,
+                        ),
                         cents: entry.value,
                         totalCents: summary.netExpenseCents,
                       ),
@@ -233,12 +244,12 @@ final class _Section extends StatelessWidget {
 
 final class _CategoryBar extends StatelessWidget {
   const _CategoryBar({
-    required this.label,
+    required this.config,
     required this.cents,
     required this.totalCents,
   });
 
-  final String label;
+  final CategoryVisualConfig config;
   final int cents;
   final int totalCents;
 
@@ -251,12 +262,28 @@ final class _CategoryBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(label)),
-              Text(Money.fromCents(cents).format()),
+              CategoryIconBadge(config: config, size: 36, iconSize: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  config.name,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                Money.fromCents(cents).format(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          LinearProgressIndicator(value: ratio),
+          LinearProgressIndicator(
+            value: ratio,
+            color: config.resolvedIconColor(context),
+            backgroundColor: config.resolvedBackgroundColor(context),
+          ),
         ],
       ),
     );
@@ -288,10 +315,4 @@ final class _ComparisonRow extends StatelessWidget {
       ),
     );
   }
-}
-
-String _cycleLabel(SalaryCycle cycle) {
-  final start = cycle.startedAt;
-  final prefix = cycle.status == SalaryCycleStatus.active ? '当前' : '历史';
-  return '$prefix：${start.year}年${start.month}月${start.day}日';
 }

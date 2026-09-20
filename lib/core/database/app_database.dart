@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:xinflow/core/date/local_date.dart';
+import 'package:xinflow/core/date/payday_calculator.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
 
 part 'app_database.g.dart';
@@ -132,7 +134,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -153,7 +155,47 @@ class AppDatabase extends _$AppDatabase {
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) await _alignCyclesToSalaryDay();
+    },
   );
+
+  Future<void> _alignCyclesToSalaryDay() async {
+    final settings = await select(appSettingRecords).getSingleOrNull();
+    if (settings == null) return;
+    final cycles = await (select(
+      salaryCycleRecords,
+    )..orderBy([(row) => OrderingTerm.asc(row.startedAt)])).get();
+    LocalDate? previousStart;
+    LocalDate? previousEnd;
+    for (final cycle in cycles) {
+      final oldDate = LocalDate.fromDateTime(
+        DateTime.fromMillisecondsSinceEpoch(cycle.startedAt),
+      );
+      var start = PaydayCalculator.cycleStartOnOrBefore(
+        today: oldDate,
+        salaryDay: settings.salaryDay,
+      );
+      if (previousStart != null && start.compareTo(previousStart) <= 0) {
+        start = previousEnd!;
+      }
+      final end = PaydayCalculator.forNextCycle(
+        confirmedDate: start,
+        salaryDay: settings.salaryDay,
+      );
+      final localStart = DateTime(start.year, start.month, start.day);
+      await (update(
+        salaryCycleRecords,
+      )..where((row) => row.id.equals(cycle.id))).write(
+        SalaryCycleRecordsCompanion(
+          startedAt: Value(localStart.toUtc().millisecondsSinceEpoch),
+          expectedPayDate: Value(end.toString()),
+        ),
+      );
+      previousStart = start;
+      previousEnd = end;
+    }
+  }
 
   Future<void> _seedDefaultCategories() async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;

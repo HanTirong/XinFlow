@@ -24,6 +24,33 @@ void main() {
       );
     });
 
+    test('finds the cycle start on or before today', () {
+      expect(
+        PaydayCalculator.cycleStartOnOrBefore(
+          today: const LocalDate(2026, 9, 19),
+          salaryDay: 10,
+        ),
+        const LocalDate(2026, 9, 10),
+      );
+      expect(
+        PaydayCalculator.cycleStartOnOrBefore(
+          today: const LocalDate(2026, 9, 9),
+          salaryDay: 10,
+        ),
+        const LocalDate(2026, 8, 10),
+      );
+    });
+
+    test('cycle start clamps to the final day of a short month', () {
+      expect(
+        PaydayCalculator.cycleStartOnOrBefore(
+          today: const LocalDate(2027, 2, 28),
+          salaryDay: 31,
+        ),
+        const LocalDate(2027, 2, 28),
+      );
+    });
+
     test('clamps day 31 to the final day of a short month', () {
       expect(
         PaydayCalculator.nextOnOrAfter(

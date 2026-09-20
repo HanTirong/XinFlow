@@ -35,3 +35,5 @@ Thumbs.db
 # Personal XinFlow backups
 *.xinflow
 
+# Local feedback documents
+feedback/

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
+import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/categories/presentation/category_management_card.dart';
 import 'package:xinflow/features/home/domain/home_snapshot.dart';
 import 'package:xinflow/features/home/presentation/home_screen.dart';
 import 'package:xinflow/features/reports/presentation/report_screen.dart';
@@ -24,6 +26,10 @@ final class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final homeSnapshot = ref.watch(homeSnapshotProvider);
+    final categories = switch (ref.watch(allCategoriesProvider)) {
+      AsyncData(:final value) => value,
+      _ => const <Category>[],
+    };
     final pages = [
       homeSnapshot.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -35,6 +41,11 @@ final class _MainShellState extends ConsumerState<MainShell> {
           snapshot: snapshot,
           onAddAllocation: _openAddAllocation,
           onSalaryReceived: () => _openCycleSettlement(snapshot),
+          onBrowseCycles: () => _selectPage(1),
+          onEditCategories: () => showCategoryManagementSheet(context),
+          onViewAllTransactions: () => _selectPage(1),
+          onEditTransaction: _openEditAllocation,
+          categories: categories,
         ),
       ),
       TransactionsScreen(onEdit: _openEditAllocation),
@@ -44,7 +55,7 @@ final class _MainShellState extends ConsumerState<MainShell> {
 
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
-      floatingActionButton: _selectedIndex == 0 || _selectedIndex == 1
+      floatingActionButton: _selectedIndex == 1
           ? FloatingActionButton.extended(
               onPressed: _openAddAllocation,
               icon: const Icon(Icons.add_rounded),
@@ -80,6 +91,8 @@ final class _MainShellState extends ConsumerState<MainShell> {
       ),
     );
   }
+
+  void _selectPage(int index) => setState(() => _selectedIndex = index);
 
   Future<void> _openAddAllocation([String? categoryId]) =>
       _openAllocationEditor(initialCategoryId: categoryId);

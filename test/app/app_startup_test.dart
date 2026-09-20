@@ -50,7 +50,12 @@ void main() {
     expect(find.text('¥8,500'), findsNWidgets(2));
     expect(find.text('预览数据'), findsNothing);
 
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.scrollUntilVisible(
+      find.text('记一笔'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('记一笔'));
     await tester.pumpAndSettle();
     expect(find.text('记一笔'), findsWidgets);
     await tester.enterText(find.widgetWithText(TextFormField, '金额'), '28.60');
@@ -59,6 +64,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 1000));
+    await tester.pumpAndSettle();
     expect(find.text('¥8,471.40'), findsOneWidget);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
@@ -126,7 +133,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('¥8,500'), findsNWidgets(2));
 
-    await tester.tap(find.byTooltip('确认工资到账'));
+    await tester.tap(find.text('距离下次发薪'));
     await tester.pumpAndSettle();
     expect(find.text('确认工资到账'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextFormField, '新到账工资'), '9000');

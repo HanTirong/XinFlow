@@ -29,6 +29,7 @@ void main() {
         newCycleId: 'cycle-2',
         newSalaryCents: 1200000,
         confirmedAt: DateTime.utc(2026, 9, 15, 9),
+        newCycleStartedAt: DateTime.utc(2026, 9, 15),
         nextExpectedPayDate: const LocalDate(2026, 10, 15),
       );
 
@@ -36,6 +37,7 @@ void main() {
       expect(transition.closedCycle.finalRemainingCents, 400000);
       expect(transition.newActiveCycle.status, SalaryCycleStatus.active);
       expect(transition.newActiveCycle.salaryCents, 1200000);
+      expect(transition.newActiveCycle.startedAt, DateTime.utc(2026, 9, 15));
     },
   );
 
@@ -64,6 +66,7 @@ void main() {
         newCycleId: 'cycle-2',
         newSalaryCents: 1200000,
         confirmedAt: DateTime.utc(2026, 9, 15, 9),
+        newCycleStartedAt: DateTime.utc(2026, 9, 15),
         nextExpectedPayDate: const LocalDate(2026, 10, 15),
       ),
       throwsStateError,

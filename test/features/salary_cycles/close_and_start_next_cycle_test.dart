@@ -47,6 +47,7 @@ void main() {
       expect(cycles.replaceCallCount, 1);
       expect(transition.closedCycle.finalRemainingCents, 600000);
       expect(transition.newActiveCycle.salaryCents, 1200000);
+      expect(transition.newActiveCycle.startedAt, DateTime.utc(2026, 9, 15));
       expect(
         transition.newActiveCycle.expectedPayDate,
         const LocalDate(2026, 10, 15),

@@ -127,7 +127,7 @@ final class SettingsScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
               title: Text('薪流 0.1.0'),
-              subtitle: Text('数据库版本 1 · 备份格式版本 1'),
+              subtitle: Text('数据库版本 2 · 备份格式版本 1'),
             ),
           ),
         ],
@@ -178,7 +178,10 @@ final class SettingsScreen extends ConsumerWidget {
       return;
     }
     await ref.read(settingsRepositoryProvider).updateSalaryDay(value);
-    ref.invalidate(startupProvider);
+    ref
+      ..invalidate(startupProvider)
+      ..invalidate(homeSnapshotProvider)
+      ..invalidate(salaryCyclesProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,

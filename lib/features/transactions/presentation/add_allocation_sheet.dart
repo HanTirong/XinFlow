@@ -340,6 +340,7 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
         if (children.isNotEmpty) ...[
           const SizedBox(height: 14),
           DropdownButtonFormField<String?>(
+            key: ValueKey(_categoryId),
             initialValue: _subcategoryId,
             decoration: const InputDecoration(labelText: '二级分类（可选）'),
             items: [

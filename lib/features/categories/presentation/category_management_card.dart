@@ -4,6 +4,14 @@ import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
+Future<void> showCategoryManagementSheet(BuildContext context) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => const _CategoryManagementSheet(),
+    );
+
 final class CategoryManagementCard extends ConsumerWidget {
   const CategoryManagementCard({super.key});
 
@@ -22,12 +30,7 @@ final class CategoryManagementCard extends ConsumerWidget {
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (context) => const _CategoryManagementSheet(),
-        ),
+        onTap: () => showCategoryManagementSheet(context),
       ),
     );
   }
@@ -166,6 +169,7 @@ final class _CategoryManagementSheet extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String?>(
+                    key: ValueKey(flowType),
                     initialValue: parentId,
                     decoration: const InputDecoration(labelText: '上级分类（可选）'),
                     items: [

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
-import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/categories/presentation/category_visual_config.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/salary_cycles/presentation/cycle_picker_sheet.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+import 'package:xinflow/features/transactions/presentation/transaction_amount_formatter.dart';
 
 typedef EditAllocationCallback = void Function(TransactionEntry entry);
 
@@ -75,20 +77,9 @@ final class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           if (cycles.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: DropdownButtonFormField<String>(
-                initialValue: selectedCycle?.id,
-                decoration: const InputDecoration(
-                  labelText: '工资周期',
-                  prefixIcon: Icon(Icons.calendar_month_outlined),
-                ),
-                items: [
-                  for (final cycle in cycles)
-                    DropdownMenuItem(
-                      value: cycle.id,
-                      child: Text(_cycleLabel(cycle)),
-                    ),
-                ],
-                onChanged: (value) => setState(() => _selectedCycleId = value),
+              child: SalaryCycleSelector(
+                cycle: selectedCycle!,
+                onTap: () => _chooseCycle(cycles, selectedCycle),
               ),
             ),
           const SizedBox(height: 12),
@@ -135,6 +126,20 @@ final class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     });
     return result;
   }
+
+  Future<void> _chooseCycle(
+    List<SalaryCycle> cycles,
+    SalaryCycle selected,
+  ) async {
+    final cycleId = await showSalaryCyclePicker(
+      context: context,
+      cycles: cycles,
+      selectedCycleId: selected.id,
+    );
+    if (cycleId != null && mounted) {
+      setState(() => _selectedCycleId = cycleId);
+    }
+  }
 }
 
 final class _TransactionList extends StatelessWidget {
@@ -167,6 +172,12 @@ final class _TransactionList extends StatelessWidget {
         final subcategory = entry.subcategoryId == null
             ? null
             : categoryById[entry.subcategoryId];
+        final visual = CategoryVisuals.resolve(
+          categoryId: entry.categoryId,
+          categories: categories,
+          fallbackName: category?.name,
+          fallbackType: entry.flowType,
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -186,10 +197,13 @@ final class _TransactionList extends StatelessWidget {
                 onTap: entry.entryKind == EntryKind.allocation && onEdit != null
                     ? () => onEdit!(entry)
                     : null,
-                leading: CircleAvatar(
-                  child: Icon(_iconFor(entry.flowType), size: 20),
+                leading: CategoryIconBadge(config: visual),
+                title: Text(
+                  visual.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                title: Text(category?.name ?? '未知分类'),
                 subtitle: Text(
                   [
                         if (subcategory != null) subcategory.name,
@@ -202,13 +216,15 @@ final class _TransactionList extends StatelessWidget {
                         ].join(' · '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '${entry.entryKind == EntryKind.refund ? '+' : '-'} '
-                      '${Money.fromCents(entry.amountCents).format()}',
+                      formatTransactionAmount(entry),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: entry.entryKind == EntryKind.refund
                             ? Theme.of(context).colorScheme.primary
@@ -277,25 +293,8 @@ final class _LoadError extends StatelessWidget {
   );
 }
 
-IconData _iconFor(FlowType flowType) => switch (flowType) {
-  FlowType.expense => Icons.shopping_bag_outlined,
-  FlowType.saving => Icons.savings_outlined,
-  FlowType.investment => Icons.show_chart_rounded,
-};
-
 String _flowLabel(FlowType flowType) => switch (flowType) {
   FlowType.expense => '消费',
   FlowType.saving => '存款',
   FlowType.investment => '理财',
 };
-
-String _cycleLabel(SalaryCycle cycle) {
-  final start = cycle.startedAt;
-  final end = cycle.status == SalaryCycleStatus.active
-      ? cycle.expectedPayDate.toString()
-      : '${cycle.closedAt!.year.toString().padLeft(4, '0')}-'
-            '${cycle.closedAt!.month.toString().padLeft(2, '0')}-'
-            '${cycle.closedAt!.day.toString().padLeft(2, '0')}';
-  final prefix = cycle.status == SalaryCycleStatus.active ? '当前' : '历史';
-  return '$prefix：${start.year}-${start.month}-${start.day} 至 $end';
-}
