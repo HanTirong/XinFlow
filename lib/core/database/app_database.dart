@@ -13,6 +13,9 @@ class SalaryCycleRecords extends Table {
   TextColumn get id => text()();
   IntColumn get salaryCents =>
       integer().customConstraint('NOT NULL CHECK (salary_cents >= 0)')();
+  IntColumn get carryoverCents => integer().customConstraint(
+    'NOT NULL DEFAULT 0 CHECK (carryover_cents >= 0)',
+  )();
   IntColumn get startedAt => integer()();
   TextColumn get expectedPayDate => text()();
   IntColumn get closedAt => integer().nullable()();
@@ -48,7 +51,9 @@ class CategoryRecords extends Table {
     "NOT NULL CHECK (flow_type IN ('expense', 'saving', 'investment'))",
   )();
   TextColumn get iconKey => text()();
+  TextColumn get colorKey => text().withDefault(const Constant('neutral'))();
   IntColumn get sortOrder => integer()();
+  BoolColumn get showOnHome => boolean().withDefault(const Constant(false))();
   BoolColumn get isSystem => boolean()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   IntColumn get createdAt => integer()();
@@ -66,7 +71,7 @@ class TransactionRecords extends Table {
   TextColumn get id => text()();
   TextColumn get salaryCycleId => text().references(SalaryCycleRecords, #id)();
   TextColumn get entryKind => text().customConstraint(
-    "NOT NULL CHECK (entry_kind IN ('allocation', 'refund'))",
+    "NOT NULL CHECK (entry_kind IN ('allocation', 'refund', 'withdrawal'))",
   )();
   TextColumn get flowType => text().customConstraint(
     "NOT NULL CHECK (flow_type IN ('expense', 'saving', 'investment'))",
@@ -94,6 +99,9 @@ class TransactionRecords extends Table {
   List<String> get customConstraints => [
     "CHECK ((entry_kind = 'allocation' AND reverses_transaction_id IS NULL) "
         "OR (entry_kind = 'refund' AND flow_type = 'expense' "
+        'AND reverses_transaction_id IS NOT NULL) '
+        "OR (entry_kind = 'withdrawal' "
+        "AND flow_type IN ('saving', 'investment') "
         'AND reverses_transaction_id IS NOT NULL))',
   ];
 }
@@ -114,10 +122,42 @@ class AppSettingRecords extends Table {
   TextColumn get themeMode => text().customConstraint(
     "NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))",
   )();
+  BoolColumn get hideAmounts => boolean().withDefault(const Constant(false))();
+  BoolColumn get appLockEnabled =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get autoLockMinutes => integer().customConstraint(
+    'NOT NULL DEFAULT 5 CHECK (auto_lock_minutes >= 0)',
+  )();
+  IntColumn get lastBackupAt => integer().nullable()();
+  IntColumn get backupReminderDays => integer().customConstraint(
+    'NOT NULL DEFAULT 7 CHECK (backup_reminder_days BETWEEN 1 AND 365)',
+  )();
   IntColumn get updatedAt => integer()();
 
   @override
   Set<Column<Object>> get primaryKey => {singletonId};
+}
+
+class BudgetRecords extends Table {
+  @override
+  String get tableName => 'budgets';
+
+  TextColumn get id => text()();
+  TextColumn get salaryCycleId => text().references(SalaryCycleRecords, #id)();
+  TextColumn get categoryId =>
+      text().nullable().references(CategoryRecords, #id)();
+  IntColumn get limitCents =>
+      integer().customConstraint('NOT NULL CHECK (limit_cents > 0)')();
+  IntColumn get createdAt => integer()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {salaryCycleId, categoryId},
+  ];
 }
 
 @DriftDatabase(
@@ -126,6 +166,7 @@ class AppSettingRecords extends Table {
     CategoryRecords,
     TransactionRecords,
     AppSettingRecords,
+    BudgetRecords,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -134,7 +175,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -150,6 +191,7 @@ class AppDatabase extends _$AppDatabase {
         ON categories(COALESCE(parent_id, ''), name)
         WHERE deleted_at IS NULL
       ''');
+      await _createBudgetScopeIndex();
       await _seedDefaultCategories();
     },
     beforeOpen: (details) async {
@@ -157,6 +199,69 @@ class AppDatabase extends _$AppDatabase {
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) await _alignCyclesToSalaryDay();
+      if (from < 3) {
+        if (!await _columnExists('salary_cycles', 'carryover_cents')) {
+          await migrator.addColumn(
+            salaryCycleRecords,
+            salaryCycleRecords.carryoverCents,
+          );
+        }
+        if (!await _columnExists('categories', 'color_key')) {
+          await migrator.addColumn(categoryRecords, categoryRecords.colorKey);
+        }
+        if (!await _columnExists('categories', 'show_on_home')) {
+          await migrator.addColumn(categoryRecords, categoryRecords.showOnHome);
+        }
+        if (!await _columnExists('app_settings', 'hide_amounts')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.hideAmounts,
+          );
+        }
+        if (!await _columnExists('app_settings', 'app_lock_enabled')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.appLockEnabled,
+          );
+        }
+        if (!await _columnExists('app_settings', 'auto_lock_minutes')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.autoLockMinutes,
+          );
+        }
+        if (!await _columnExists('app_settings', 'last_backup_at')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.lastBackupAt,
+          );
+        }
+        if (!await _columnExists('app_settings', 'backup_reminder_days')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.backupReminderDays,
+          );
+        }
+        if (!await _transactionTableSupportsWithdrawal()) {
+          await migrator.alterTable(TableMigration(transactionRecords));
+        }
+        if (!await _tableExists('budgets')) {
+          await migrator.createTable(budgetRecords);
+        }
+        await _createBudgetScopeIndex();
+        for (final category in DefaultCategories.values.where(
+          (item) => item.showOnHome,
+        )) {
+          await (update(
+            categoryRecords,
+          )..where((row) => row.id.equals(category.id))).write(
+            CategoryRecordsCompanion(
+              colorKey: Value(category.colorKey),
+              showOnHome: const Value(true),
+            ),
+          );
+        }
+      }
     },
   );
 
@@ -197,6 +302,32 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  Future<bool> _columnExists(String table, String column) async {
+    final rows = await customSelect("PRAGMA table_info('$table')").get();
+    return rows.any((row) => row.read<String>('name') == column);
+  }
+
+  Future<bool> _tableExists(String table) async {
+    final row = await customSelect(
+      'SELECT 1 AS found FROM sqlite_master WHERE type = ? AND name = ?',
+      variables: [Variable('table'), Variable(table)],
+    ).getSingleOrNull();
+    return row != null;
+  }
+
+  Future<bool> _transactionTableSupportsWithdrawal() async {
+    final row = await customSelect(
+      'SELECT sql FROM sqlite_master WHERE type = ? AND name = ?',
+      variables: [const Variable('table'), const Variable('transactions')],
+    ).getSingleOrNull();
+    return row?.read<String>('sql').contains('withdrawal') ?? false;
+  }
+
+  Future<void> _createBudgetScopeIndex() => customStatement('''
+    CREATE UNIQUE INDEX IF NOT EXISTS unique_budget_scope
+    ON budgets(salary_cycle_id, COALESCE(category_id, ''))
+  ''');
+
   Future<void> _seedDefaultCategories() async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     await batch((batch) {
@@ -208,7 +339,9 @@ class AppDatabase extends _$AppDatabase {
             name: category.name,
             flowType: category.flowType.name,
             iconKey: category.iconKey,
+            colorKey: Value(category.colorKey),
             sortOrder: category.sortOrder,
+            showOnHome: Value(category.showOnHome),
             isSystem: category.isSystem,
             isActive: Value(category.isActive),
             createdAt: now,
@@ -217,4 +350,34 @@ class AppDatabase extends _$AppDatabase {
       ]);
     });
   }
+
+  Future<void> clearUserData() => transaction(() async {
+    await delete(budgetRecords).go();
+    await delete(transactionRecords).go();
+    await delete(salaryCycleRecords).go();
+    await delete(appSettingRecords).go();
+    await delete(categoryRecords).go();
+    await _seedDefaultCategories();
+  });
+
+  Future<void> deleteClosedCycle(String cycleId) => transaction(() async {
+    final cycle =
+        await (select(salaryCycleRecords)..where(
+              (row) =>
+                  row.id.equals(cycleId) &
+                  row.status.equals('closed') &
+                  row.deletedAt.isNull(),
+            ))
+            .getSingleOrNull();
+    if (cycle == null) throw StateError('只能删除已封存的工资周期。');
+    await (delete(
+      budgetRecords,
+    )..where((row) => row.salaryCycleId.equals(cycleId))).go();
+    await (delete(
+      transactionRecords,
+    )..where((row) => row.salaryCycleId.equals(cycleId))).go();
+    await (delete(
+      salaryCycleRecords,
+    )..where((row) => row.id.equals(cycleId))).go();
+  });
 }

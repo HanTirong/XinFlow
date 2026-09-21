@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:drift/drift.dart';
 import 'package:xinflow/core/clock/clock.dart';
 import 'package:xinflow/core/database/app_database.dart';
@@ -29,11 +31,13 @@ final class BackupCounts {
     required this.categories,
     required this.cycles,
     required this.transactions,
+    this.budgets = 0,
   });
 
   final int categories;
   final int cycles;
   final int transactions;
+  final int budgets;
 }
 
 final class BackupChangeSummary {
@@ -93,10 +97,15 @@ final class BackupFormatException implements Exception {
   String toString() => message;
 }
 
+final class BackupPasswordRequired extends BackupFormatException {
+  const BackupPasswordRequired() : super('此备份已加密，请输入密码。');
+}
+
 final class XinFlowBackupService {
   const XinFlowBackupService({required this._database, required this._clock});
 
-  static const backupVersion = 1;
+  static const backupVersion = 2;
+  static const _pbkdf2Iterations = 210000;
   static const maximumBackupBytes = 50 * 1024 * 1024;
   static const maximumManifestBytes = 1024 * 1024;
   static const maximumEntityCount = 100000;
@@ -104,13 +113,14 @@ final class XinFlowBackupService {
   final AppDatabase _database;
   final Clock _clock;
 
-  Future<BackupArtifact> exportBackup() async {
+  Future<BackupArtifact> exportBackup({String? password}) async {
     final settings = await _database.select(_database.appSettingRecords).get();
     final categories = await _database.select(_database.categoryRecords).get();
     final cycles = await _database.select(_database.salaryCycleRecords).get();
     final transactions = await _database
         .select(_database.transactionRecords)
         .get();
+    final budgets = await _database.select(_database.budgetRecords).get();
     if (settings.length != 1) {
       throw StateError('设置表状态异常，无法导出备份。');
     }
@@ -118,17 +128,19 @@ final class XinFlowBackupService {
     categories.sort((a, b) => a.id.compareTo(b.id));
     cycles.sort((a, b) => a.id.compareTo(b.id));
     transactions.sort((a, b) => a.id.compareTo(b.id));
+    budgets.sort((a, b) => a.id.compareTo(b.id));
     final data = <String, Object?>{
       'settings': settings.map((row) => row.toJson()).toList(),
       'categories': categories.map((row) => row.toJson()).toList(),
       'salaryCycles': cycles.map((row) => row.toJson()).toList(),
       'transactions': transactions.map((row) => row.toJson()).toList(),
+      'budgets': budgets.map((row) => row.toJson()).toList(),
     };
     final dataText = jsonEncode(data);
     final dataBytes = utf8.encode(dataText);
     final digest = sha256.convert(dataBytes).toString();
     final exportedAt = _clock.now().toUtc();
-    final manifest = jsonEncode({
+    final manifestData = <String, Object?>{
       'format': 'xinflow-backup',
       'backupVersion': backupVersion,
       'appVersion': '0.1.0',
@@ -137,12 +149,45 @@ final class XinFlowBackupService {
       'currencyCode': 'CNY',
       'dataFile': 'data.json',
       'dataSha256': digest,
-    });
-
-    final archive = Archive()
-      ..addFile(ArchiveFile.string('manifest.json', manifest))
-      ..addFile(ArchiveFile.bytes('data.json', dataBytes))
-      ..addFile(ArchiveFile.string('checksum.sha256', '$digest  data.json\n'));
+      'encrypted': password != null,
+    };
+    final archive = Archive();
+    if (password == null) {
+      archive
+        ..addFile(ArchiveFile.string('manifest.json', jsonEncode(manifestData)))
+        ..addFile(ArchiveFile.bytes('data.json', dataBytes))
+        ..addFile(
+          ArchiveFile.string('checksum.sha256', '$digest  data.json\n'),
+        );
+    } else {
+      if (password.length < 8) {
+        throw const BackupFormatException('备份密码至少需要 8 个字符。');
+      }
+      final random = math.Random.secure();
+      final salt = List<int>.generate(16, (_) => random.nextInt(256));
+      final kdf = cryptography.Pbkdf2(
+        macAlgorithm: cryptography.Hmac.sha256(),
+        iterations: _pbkdf2Iterations,
+        bits: 256,
+      );
+      final key = await kdf.deriveKeyFromPassword(
+        password: password,
+        nonce: salt,
+      );
+      final cipher = cryptography.AesGcm.with256bits();
+      final secretBox = await cipher.encrypt(dataBytes, secretKey: key);
+      manifestData['encryption'] = {
+        'algorithm': 'AES-256-GCM',
+        'kdf': 'PBKDF2-HMAC-SHA256',
+        'iterations': _pbkdf2Iterations,
+        'salt': base64Encode(salt),
+        'nonceLength': cipher.nonceLength,
+        'macLength': cipher.macAlgorithm.macLength,
+      };
+      archive
+        ..addFile(ArchiveFile.string('manifest.json', jsonEncode(manifestData)))
+        ..addFile(ArchiveFile.bytes('data.enc', secretBox.concatenation()));
+    }
     final bytes = ZipEncoder().encodeBytes(archive);
     final timestamp =
         '${exportedAt.year.toString().padLeft(4, '0')}'
@@ -158,11 +203,15 @@ final class XinFlowBackupService {
         categories: categories.length,
         cycles: cycles.length,
         transactions: transactions.length,
+        budgets: budgets.length,
       ),
     );
   }
 
-  Future<BackupImportPreview> previewImport(Uint8List bytes) async {
+  Future<BackupImportPreview> previewImport(
+    Uint8List bytes, {
+    String? password,
+  }) async {
     if (bytes.isEmpty || bytes.length > maximumBackupBytes) {
       throw const BackupFormatException('备份文件为空或超过 50MB 限制。');
     }
@@ -173,12 +222,11 @@ final class XinFlowBackupService {
       throw const BackupFormatException('文件不是有效的 XinFlow ZIP 备份。');
     }
     final names = archive.files.map((file) => file.name).toSet();
-    const expected = {'manifest.json', 'data.json', 'checksum.sha256'};
-    if (names.length != expected.length || !names.containsAll(expected)) {
-      throw const BackupFormatException('备份缺少 manifest、data 或 checksum 文件。');
+    if (!names.contains('manifest.json')) {
+      throw const BackupFormatException('备份缺少 manifest.json。');
     }
     for (final file in archive.files) {
-      final limit = file.name == 'data.json'
+      final limit = file.name == 'data.json' || file.name == 'data.enc'
           ? maximumBackupBytes
           : maximumManifestBytes;
       if (file.size > limit) {
@@ -186,8 +234,9 @@ final class XinFlowBackupService {
       }
     }
     final manifest = _decodeObject(_readText(archive, 'manifest.json'));
+    final version = manifest['backupVersion'];
     if (manifest['format'] != 'xinflow-backup' ||
-        manifest['backupVersion'] != backupVersion ||
+        (version != 1 && version != backupVersion) ||
         manifest['currencyCode'] != 'CNY') {
       throw const BackupFormatException('备份格式、版本或币种不受支持。');
     }
@@ -195,14 +244,26 @@ final class XinFlowBackupService {
     if (schemaVersion is! int || schemaVersion > _database.schemaVersion) {
       throw const BackupFormatException('备份来自更新的数据库版本，当前应用无法恢复。');
     }
-    final dataText = _readText(archive, 'data.json');
+    final encrypted = manifest['encrypted'] == true;
+    final dataText = encrypted
+        ? await _decryptData(archive, manifest, password)
+        : _readAndValidatePlainData(archive, manifest);
+    if (encrypted &&
+        names.difference({'manifest.json', 'data.enc'}).isNotEmpty) {
+      throw const BackupFormatException('加密备份包含不受支持的附加文件。');
+    }
+    if (!encrypted &&
+        (names.length != 3 ||
+            !names.containsAll({
+              'manifest.json',
+              'data.json',
+              'checksum.sha256',
+            }))) {
+      throw const BackupFormatException('备份缺少 manifest、data 或 checksum 文件。');
+    }
     final actualDigest = sha256.convert(utf8.encode(dataText)).toString();
     if (manifest['dataSha256'] != actualDigest) {
-      throw const BackupFormatException('data.json 的 SHA-256 校验失败。');
-    }
-    final checksumText = _readText(archive, 'checksum.sha256').trim();
-    if (!checksumText.startsWith(actualDigest)) {
-      throw const BackupFormatException('checksum.sha256 与数据不一致。');
+      throw const BackupFormatException('备份数据的 SHA-256 校验失败。');
     }
 
     final payload = _BackupPayload.fromJson(_decodeObject(dataText));
@@ -247,6 +308,7 @@ final class XinFlowBackupService {
     }
     await _database.transaction(() async {
       if (mode == BackupImportMode.replace) {
+        await _database.delete(_database.budgetRecords).go();
         await _database.delete(_database.transactionRecords).go();
         await _database.delete(_database.salaryCycleRecords).go();
         await _database.delete(_database.categoryRecords).go();
@@ -324,6 +386,19 @@ final class XinFlowBackupService {
           .insertOnConflictUpdate(row);
     }
 
+    Future<void> upsertBudget(BudgetRecord row) async {
+      if (merge) {
+        final local = await (_database.select(
+          _database.budgetRecords,
+        )..where((item) => item.id.equals(row.id))).getSingleOrNull();
+        if (local != null &&
+            (local.updatedAt >= row.updatedAt || _same(local, row))) {
+          return;
+        }
+      }
+      await _database.into(_database.budgetRecords).insertOnConflictUpdate(row);
+    }
+
     await upsertSettings(payload.settings.single);
     for (final row in payload.categories.where((row) => row.parentId == null)) {
       await upsertCategory(row);
@@ -342,14 +417,17 @@ final class XinFlowBackupService {
       await upsertCycle(row);
     }
     for (final row in payload.transactions.where(
-      (row) => row.entryKind != EntryKind.refund.name,
+      (row) => row.entryKind == EntryKind.allocation.name,
     )) {
       await upsertTransaction(row);
     }
     for (final row in payload.transactions.where(
-      (row) => row.entryKind == EntryKind.refund.name,
+      (row) => row.entryKind != EntryKind.allocation.name,
     )) {
       await upsertTransaction(row);
+    }
+    for (final row in payload.budgets) {
+      await upsertBudget(row);
     }
   }
 
@@ -366,6 +444,7 @@ final class XinFlowBackupService {
     final localTransactions = await _database
         .select(_database.transactionRecords)
         .get();
+    final localBudgets = await _database.select(_database.budgetRecords).get();
     return _summarizeChanges<AppSettingRecord>(
           imported: payload.settings,
           local: localSettings,
@@ -393,6 +472,13 @@ final class XinFlowBackupService {
           idOf: (row) => row.id,
           updatedAtOf: (row) => row.updatedAt,
           deletedAtOf: (row) => row.deletedAt,
+        ) +
+        _summarizeChanges<BudgetRecord>(
+          imported: payload.budgets,
+          local: localBudgets,
+          idOf: (row) => row.id,
+          updatedAtOf: (row) => row.updatedAt,
+          deletedAtOf: (_) => null,
         );
   }
 
@@ -435,10 +521,87 @@ final class XinFlowBackupService {
   bool _same(DataClass first, DataClass second) =>
       jsonEncode(first.toJson()) == jsonEncode(second.toJson());
 
-  String _readText(Archive archive, String name) {
+  String _readAndValidatePlainData(
+    Archive archive,
+    Map<String, dynamic> manifest,
+  ) {
+    final dataText = _readText(archive, 'data.json');
+    final digest = sha256.convert(utf8.encode(dataText)).toString();
+    final checksumText = _readText(archive, 'checksum.sha256').trim();
+    if (manifest['dataSha256'] != digest || !checksumText.startsWith(digest)) {
+      throw const BackupFormatException('未加密备份的 SHA-256 数据校验失败。');
+    }
+    return dataText;
+  }
+
+  Future<String> _decryptData(
+    Archive archive,
+    Map<String, dynamic> manifest,
+    String? password,
+  ) async {
+    if (password == null || password.isEmpty) {
+      throw const BackupPasswordRequired();
+    }
+    final encryption = manifest['encryption'];
+    if (encryption is! Map ||
+        encryption['algorithm'] != 'AES-256-GCM' ||
+        encryption['kdf'] != 'PBKDF2-HMAC-SHA256') {
+      throw const BackupFormatException('备份使用了不受支持的加密方案。');
+    }
+    final iterations = encryption['iterations'];
+    final nonceLength = encryption['nonceLength'];
+    final macLength = encryption['macLength'];
+    if (iterations is! int ||
+        iterations < 100000 ||
+        iterations > 1000000 ||
+        nonceLength is! int ||
+        macLength is! int) {
+      throw const BackupFormatException('加密参数无效。');
+    }
+    List<int> salt;
+    try {
+      salt = base64Decode('${encryption['salt']}');
+    } on Object {
+      throw const BackupFormatException('加密盐值无效。');
+    }
+    final encryptedBytes = _readBytes(archive, 'data.enc');
+    try {
+      final kdf = cryptography.Pbkdf2(
+        macAlgorithm: cryptography.Hmac.sha256(),
+        iterations: iterations,
+        bits: 256,
+      );
+      final key = await kdf.deriveKeyFromPassword(
+        password: password,
+        nonce: salt,
+      );
+      final cipher = cryptography.AesGcm.with256bits(nonceLength: nonceLength);
+      final secretBox = cryptography.SecretBox.fromConcatenation(
+        encryptedBytes,
+        nonceLength: nonceLength,
+        macLength: macLength,
+      );
+      return utf8.decode(await cipher.decrypt(secretBox, secretKey: key));
+    } on cryptography.SecretBoxAuthenticationError {
+      throw const BackupFormatException('备份密码错误或加密内容已损坏。');
+    } on FormatException {
+      throw const BackupFormatException('解密后的备份不是有效文本。');
+    } on BackupFormatException {
+      rethrow;
+    } on Object {
+      throw const BackupFormatException('备份密码错误或加密内容已损坏。');
+    }
+  }
+
+  Uint8List _readBytes(Archive archive, String name) {
     final file = archive.files.where((entry) => entry.name == name).firstOrNull;
     final bytes = file?.readBytes();
     if (bytes == null) throw BackupFormatException('备份中的 $name 无法读取。');
+    return bytes;
+  }
+
+  String _readText(Archive archive, String name) {
+    final bytes = _readBytes(archive, name);
     try {
       return utf8.decode(bytes);
     } on Object {
@@ -462,7 +625,8 @@ final class XinFlowBackupService {
     }
     if (payload.categories.length +
             payload.cycles.length +
-            payload.transactions.length >
+            payload.transactions.length +
+            payload.budgets.length >
         maximumEntityCount) {
       throw const BackupFormatException('备份实体数量超过 100000 条限制。');
     }
@@ -480,6 +644,13 @@ final class XinFlowBackupService {
     _ensureUnique(payload.categories.map((row) => row.id), '分类');
     _ensureUnique(payload.cycles.map((row) => row.id), '工资周期');
     _ensureUnique(payload.transactions.map((row) => row.id), '流水');
+    _ensureUnique(payload.budgets.map((row) => row.id), '预算');
+    _ensureUnique(
+      payload.budgets.map(
+        (row) => '${row.salaryCycleId}|${row.categoryId ?? ''}',
+      ),
+      '预算范围',
+    );
     final categoryIds = payload.categories.map((row) => row.id).toSet();
     final cycleIds = payload.cycles.map((row) => row.id).toSet();
     final transactionIds = payload.transactions.map((row) => row.id).toSet();
@@ -529,9 +700,9 @@ final class XinFlowBackupService {
               !categoryIds.contains(transaction.subcategoryId))) {
         throw const BackupFormatException('备份流水引用了不存在的周期或分类。');
       }
-      if (transaction.entryKind == EntryKind.refund.name &&
+      if (transaction.entryKind != EntryKind.allocation.name &&
           !transactionIds.contains(transaction.reversesTransactionId)) {
-        throw const BackupFormatException('备份退款引用了不存在的原消费。');
+        throw const BackupFormatException('备份冲减记录引用了不存在的原流水。');
       }
       final category = categoriesById[transaction.categoryId];
       final subcategory = categoriesById[transaction.subcategoryId];
@@ -549,8 +720,18 @@ final class XinFlowBackupService {
             original.categoryId != transaction.categoryId) {
           throw const BackupFormatException('备份退款与原消费不匹配。');
         }
+      } else if (transaction.entryKind == EntryKind.withdrawal.name) {
+        final original = transactionsById[transaction.reversesTransactionId];
+        if (original == null ||
+            original.entryKind != EntryKind.allocation.name ||
+            original.flowType == FlowType.expense.name ||
+            original.flowType != transaction.flowType ||
+            original.salaryCycleId != transaction.salaryCycleId ||
+            original.categoryId != transaction.categoryId) {
+          throw const BackupFormatException('备份提取记录与原存款或理财不匹配。');
+        }
       } else if (transaction.reversesTransactionId != null) {
-        throw const BackupFormatException('普通流水不能包含退款关联。');
+        throw const BackupFormatException('普通流水不能包含冲减关联。');
       }
     }
     for (final original in payload.transactions.where(
@@ -566,6 +747,25 @@ final class XinFlowBackupService {
           .fold<int>(0, (sum, row) => sum + row.amountCents);
       if (refunded > original.amountCents) {
         throw const BackupFormatException('备份中的累计退款超过原消费金额。');
+      }
+      final withdrawn = payload.transactions
+          .where(
+            (row) =>
+                row.entryKind == EntryKind.withdrawal.name &&
+                row.reversesTransactionId == original.id &&
+                row.deletedAt == null,
+          )
+          .fold<int>(0, (sum, row) => sum + row.amountCents);
+      if (withdrawn > original.amountCents) {
+        throw const BackupFormatException('备份中的累计提取超过原分配金额。');
+      }
+    }
+    for (final budget in payload.budgets) {
+      if (budget.limitCents <= 0 ||
+          !cycleIds.contains(budget.salaryCycleId) ||
+          (budget.categoryId != null &&
+              !categoryIds.contains(budget.categoryId))) {
+        throw const BackupFormatException('备份包含无效预算。');
       }
     }
     final activeCount = payload.cycles
@@ -603,11 +803,13 @@ final class _BackupPayload {
     required this.categories,
     required this.cycles,
     required this.transactions,
+    required this.budgets,
   });
 
   factory _BackupPayload.fromJson(Map<String, dynamic> json) {
-    List<Map<String, dynamic>> list(String key) {
+    List<Map<String, dynamic>> list(String key, {bool optional = false}) {
       final value = json[key];
+      if (optional && value == null) return const [];
       if (value is! List) throw BackupFormatException('备份缺少 $key 数组。');
       return value
           .map((item) {
@@ -619,18 +821,38 @@ final class _BackupPayload {
 
     try {
       return _BackupPayload(
-        settings: list(
-          'settings',
-        ).map(AppSettingRecord.fromJson).toList(growable: false),
-        categories: list(
-          'categories',
-        ).map(CategoryRecord.fromJson).toList(growable: false),
-        cycles: list(
-          'salaryCycles',
-        ).map(SalaryCycleRecord.fromJson).toList(growable: false),
+        settings: list('settings')
+            .map((row) {
+              row
+                ..putIfAbsent('hideAmounts', () => false)
+                ..putIfAbsent('appLockEnabled', () => false)
+                ..putIfAbsent('autoLockMinutes', () => 5)
+                ..putIfAbsent('lastBackupAt', () => null)
+                ..putIfAbsent('backupReminderDays', () => 7);
+              return AppSettingRecord.fromJson(row);
+            })
+            .toList(growable: false),
+        categories: list('categories')
+            .map((row) {
+              row
+                ..putIfAbsent('colorKey', () => 'neutral')
+                ..putIfAbsent('showOnHome', () => false);
+              return CategoryRecord.fromJson(row);
+            })
+            .toList(growable: false),
+        cycles: list('salaryCycles')
+            .map((row) {
+              row.putIfAbsent('carryoverCents', () => 0);
+              return SalaryCycleRecord.fromJson(row);
+            })
+            .toList(growable: false),
         transactions: list(
           'transactions',
         ).map(TransactionRecord.fromJson).toList(growable: false),
+        budgets: list(
+          'budgets',
+          optional: true,
+        ).map(BudgetRecord.fromJson).toList(growable: false),
       );
     } on BackupFormatException {
       rethrow;
@@ -643,10 +865,12 @@ final class _BackupPayload {
   final List<CategoryRecord> categories;
   final List<SalaryCycleRecord> cycles;
   final List<TransactionRecord> transactions;
+  final List<BudgetRecord> budgets;
 
   BackupCounts get counts => BackupCounts(
     categories: categories.length,
     cycles: cycles.length,
     transactions: transactions.length,
+    budgets: budgets.length,
   );
 }

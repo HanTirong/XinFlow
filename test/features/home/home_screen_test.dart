@@ -29,11 +29,14 @@ void main() {
     expect(find.text('¥6,380'), findsOneWidget);
     expect(find.text('38%'), findsOneWidget);
     expect(find.text('已记录'), findsOneWidget);
+    expect(find.text('净消费'), findsOneWidget);
+    expect(find.text('¥9,620'), findsOneWidget);
     expect(find.text('距离下次发薪'), findsOneWidget);
     expect(find.text('快速记一笔'), findsOneWidget);
     expect(find.text('编辑分类'), findsOneWidget);
     expect(find.text('饮食'), findsOneWidget);
-    expect(find.text('存款'), findsOneWidget);
+    expect(find.text('存款'), findsNWidgets(2));
+    expect(find.text('理财'), findsNWidgets(2));
     final grid = tester.widget<GridView>(find.byType(GridView));
     expect(
       (grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)

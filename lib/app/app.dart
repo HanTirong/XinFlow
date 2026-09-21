@@ -5,6 +5,7 @@ import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/features/navigation/presentation/main_shell.dart';
 import 'package:xinflow/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
+import 'package:xinflow/features/security/presentation/app_lock_gate.dart';
 
 final class XinFlowApp extends ConsumerWidget {
   const XinFlowApp({super.key});
@@ -44,7 +45,7 @@ final class XinFlowApp extends ConsumerWidget {
               },
             );
           }
-          return const MainShell();
+          return const AppLockGate(child: MainShell());
         },
       ),
     );

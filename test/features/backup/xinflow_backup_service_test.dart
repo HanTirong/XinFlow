@@ -86,6 +86,34 @@ void main() {
     expect(await database.select(database.transactionRecords).get(), before);
   });
 
+  test('encrypts backups and rejects missing or incorrect passwords', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _seed(database, clock, cycleId: 'cycle-encrypted');
+    final service = XinFlowBackupService(database: database, clock: clock);
+    final artifact = await service.exportBackup(password: 'correct horse');
+
+    await expectLater(
+      service.previewImport(artifact.bytes),
+      throwsA(isA<BackupPasswordRequired>()),
+    );
+    await expectLater(
+      service.previewImport(artifact.bytes, password: 'wrong password'),
+      throwsA(
+        isA<BackupFormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('密码错误'),
+        ),
+      ),
+    );
+    final preview = await service.previewImport(
+      artifact.bytes,
+      password: 'correct horse',
+    );
+    expect(preview.counts.transactions, 2);
+  });
+
   test(
     'keeps local data for equal-time conflicts and newer deletions',
     () async {

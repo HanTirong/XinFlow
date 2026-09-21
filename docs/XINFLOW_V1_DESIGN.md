@@ -1,7 +1,7 @@
 # 薪流（XinFlow）V1 产品与工程设计手册
 
 > 文档状态：V1 开发基线  
-> 更新时间：2026-09-19  
+> 更新时间：2026-09-21
 > 适用范围：Android、iOS 本地版  
 > 代码仓库：`HanTirong/XinFlow`
 
@@ -20,13 +20,14 @@
 核心恒等式：
 
 ```text
-本期工资 = 净消费 + 净存款 + 净理财 + 当前剩余
+本期工资 + 正余额结转 = 净消费 + 净存款 + 净理财 + 当前剩余
 ```
 
 其中：
 
 - 存款和理财属于工资去向，会减少当前剩余，但不计入消费。
 - 退款冲减原消费，并增加当前剩余。
+- 提取冲减原存款或理财，并增加当前剩余。
 - 允许当前剩余为负数，负数表示本期支出或分配已经超过工资。
 - 统计周期由用户实际确认工资到账的时间决定，不等同于自然月。
 
@@ -44,13 +45,13 @@
 
 ## 4. 已确认的 V1 决策
 
-以下三项已经确认，是 V1 的固定规则：
+以下四项已经确认，是 V1 的固定规则：
 
-### 4.1 上期剩余不自动滚入新周期
+### 4.1 上期正余额仅允许手动结转
 
-关闭旧周期时保存其最终剩余。新周期的初始可用金额只等于新工资金额，不自动叠加旧周期余额。
+关闭旧周期时保存其最终剩余。新周期默认只使用新工资金额；用户可在周期切换时明确勾选，将大于零的上期剩余写入新周期独立的 `carryover_cents` 字段。负余额不能结转。
 
-这样可以保证每个周期独立满足核心恒等式，避免将“历史未分配工资”和“本期新工资”混为一体。后续如需结转，必须以显式功能和独立记录实现，不能静默改变余额。
+结转不得改写新工资金额，也不得静默发生。
 
 ### 4.2 退款使用独立退款记录
 
@@ -58,7 +59,11 @@
 
 退款记录必须关联原消费，累计退款金额不能超过原消费的有效金额。
 
-### 4.3 历史周期默认只读
+### 4.3 存款与理财提取使用独立冲减记录
+
+提取记录必须关联原存款或理财分配，允许多次部分提取，但累计有效提取不得超过原分配金额。普通流水仍不接受负数金额。
+
+### 4.4 历史周期默认只读
 
 周期封存后，普通入口只能查看。确需修改时，用户必须进入独立的“修正历史周期”流程，并看到修改会改变历史报告的明确提示。
 
@@ -76,6 +81,14 @@
 - 一级分类和二级分类
 - 新增、修改、软删除、补记流水
 - 与原消费关联的退款记录
+- 与原存款或理财关联的提取记录
+- 手动正余额结转
+- 分类图标、颜色、顺序、首页快捷项和二级分类归属编辑
+- 日期、分类、备注、金额范围筛选和分页加载
+- 跨周期趋势、平均值和长期分类变化
+- 周期与分类预算及本地提醒
+- 本地数据统计、历史周期删除和清空
+- 隐藏金额、最近任务遮挡和系统身份验证应用锁
 - 当前周期和历史周期流水查看
 - 工资周期报告
 - 默认分类与分类管理
@@ -92,7 +105,7 @@
 - OCR、语音记账和 AI 自动分类
 - 多币种换算
 - 多账户和信用卡账单管理
-- 复杂预算、分类预算和储蓄目标
+- 储蓄目标
 - 投资收益、持仓和资产净值管理
 - 自动定时切换工资周期
 - Web 版和桌面版正式发布
@@ -106,7 +119,7 @@
 | 封存周期 | 已结束且处于 `closed` 状态的工资周期 |
 | 分配 | 消费、存款和理财对本期工资的占用 |
 | 净消费 | 消费金额减去有效退款金额 |
-| 当前剩余 | 工资减去净消费、净存款和净理财 |
+| 当前剩余 | 工资加正余额结转，再减去净消费、净存款和净理财 |
 | 预计发薪日 | 根据用户设置计算出的提示日期，只用于倒计时 |
 | 实际工资到账 | 用户主动确认后发生的周期切换事件 |
 
@@ -214,6 +227,7 @@ deleted_at  INTEGER UTC milliseconds NULL
 |---|---|---|
 | id | TEXT | UUID 主键 |
 | salary_cents | INTEGER | 大于或等于 0 |
+| carryover_cents | INTEGER | 大于或等于 0；仅由显式正余额结转产生 |
 | started_at | INTEGER | 用户确认工资到账的实际时间 |
 | expected_pay_date | TEXT | `YYYY-MM-DD`，创建周期时保存的预计日期快照 |
 | closed_at | INTEGER NULL | 封存时间 |
@@ -221,7 +235,7 @@ deleted_at  INTEGER UTC milliseconds NULL
 | final_remaining_cents | INTEGER NULL | 封存时的最终剩余 |
 | created_at | INTEGER | UTC 毫秒 |
 | updated_at | INTEGER | UTC 毫秒 |
-| deleted_at | INTEGER NULL | 预留软删除能力，V1 UI 不提供周期删除 |
+| deleted_at | INTEGER NULL | 预留软删除能力；本地数据页可在确认后物理删除历史周期 |
 
 数据库必须保证未删除记录中最多存在一个 `active` 周期。应用启动时如发现多个活动周期，应停止金额写入并进入数据修复状态，不能自行猜测保留哪一个。
 
@@ -231,12 +245,12 @@ deleted_at  INTEGER UTC milliseconds NULL
 |---|---|---|
 | id | TEXT | UUID 主键 |
 | salary_cycle_id | TEXT | 外键，必填 |
-| entry_kind | TEXT | `allocation` 或 `refund` |
+| entry_kind | TEXT | `allocation`、`refund` 或 `withdrawal` |
 | flow_type | TEXT | `expense`、`saving` 或 `investment` |
 | amount_cents | INTEGER | 严格大于 0 |
 | category_id | TEXT | 一级分类 ID |
 | subcategory_id | TEXT NULL | 二级分类 ID |
-| reverses_transaction_id | TEXT NULL | 退款时必填，指向原消费 |
+| reverses_transaction_id | TEXT NULL | 退款或提取时必填，指向原分配 |
 | occurred_at | INTEGER | 实际或补记时间，UTC 毫秒 |
 | occurred_on | TEXT | 用户认知中的本地日期，`YYYY-MM-DD` |
 | note | TEXT NULL | 可选，限制合理长度 |
@@ -250,6 +264,7 @@ deleted_at  INTEGER UTC milliseconds NULL
 - `allocation` 的 `reverses_transaction_id` 必须为空。
 - `refund` 只能关联未删除的 `expense/allocation`。
 - 一笔消费可对应多笔退款，但有效退款总额不能超过原消费金额。
+- 一笔存款或理财可对应多笔提取，但有效提取总额不能超过原分配金额。
 - 退款默认继承原消费的周期和分类，不允许跨周期创建。
 - 删除原消费前，必须同时处理其退款；推荐将整组记录一并软删除。
 
@@ -264,6 +279,9 @@ deleted_at  INTEGER UTC milliseconds NULL
 | name | TEXT | 同级未删除分类名称不可重复 |
 | flow_type | TEXT | `expense`、`saving` 或 `investment` |
 | icon_key | TEXT | 应用内图标键，不保存平台资源路径 |
+| color_key | TEXT | 统一主题色键 |
+| sort_order | INTEGER | 同级显示顺序 |
+| show_on_home | INTEGER | 仅一级分类可作为首页快捷项 |
 | sort_order | INTEGER | 显示顺序 |
 | is_system | INTEGER | 默认分类标记 |
 | is_active | INTEGER | 停用后不出现在新建入口，历史仍可显示 |
@@ -327,8 +345,8 @@ V1 使用单行强类型设置表，不使用任意字符串键值存储核心�
 消费分配 = expense/allocation 合计
 消费退款 = expense/refund 合计
 净消费 = 消费分配 - 消费退款
-净存款 = saving/allocation 合计
-净理财 = investment/allocation 合计
+净存款 = saving/allocation 合计 - saving/withdrawal 合计
+净理财 = investment/allocation 合计 - investment/withdrawal 合计
 
 已分配 = 净消费 + 净存款 + 净理财
 当前剩余 = salary_cents - 已分配
@@ -545,7 +563,7 @@ abstract interface class BackupService {
 xinflow-backup-YYYYMMDD-HHmmss.xinflow
 ```
 
-`.xinflow` 是 ZIP 容器，内部包含：
+`.xinflow` 是 ZIP 容器。未加密 v2 与兼容的 v1 包含：
 
 ```text
 manifest.json
@@ -558,19 +576,20 @@ checksum.sha256
 ```json
 {
   "format": "xinflow-backup",
-  "backupVersion": 1,
-  "appVersion": "1.0.0",
-  "databaseSchemaVersion": 1,
+  "backupVersion": 2,
+  "appVersion": "0.1.0",
+  "databaseSchemaVersion": 3,
   "exportedAt": "2026-09-19T12:00:00Z",
   "currencyCode": "CNY",
   "dataFile": "data.json",
-  "dataSha256": "..."
+  "dataSha256": "...",
+  "encrypted": false
 }
 ```
 
-`data.json` 包含设置、分类、工资周期、流水以及这些实体的软删除记录。导出顺序固定，便于测试和排查，但恢复逻辑不能依赖数组顺序。
+`data.json` 包含设置、分类、工资周期、流水、预算以及这些实体的软删除记录。导出顺序固定，便于测试和排查，但恢复逻辑不能依赖数组顺序。
 
-ZIP 只提供压缩，不提供加密。导出界面必须提示备份中包含个人财务数据。V1 不宣称备份经过加密。
+加密备份只包含 `manifest.json` 与 `data.enc`。数据使用 PBKDF2-HMAC-SHA256（随机盐、210000 次迭代）派生 256 位密钥，并使用 AES-256-GCM 提供保密性和完整性。密码至少 8 个字符，应用不保存密码；密码错误或密文损坏必须在任何数据库写入前失败。当前版本继续读取未加密 v1 备份。
 
 ### 14.2 导入预检
 
@@ -579,7 +598,7 @@ ZIP 只提供压缩，不提供加密。导出界面必须提示备份中包含�
 1. 验证扩展名和 ZIP 结构。
 2. 限制压缩包、解压后文件和实体数量上限，防止异常文件耗尽存储。
 3. 验证 `format` 和 `backupVersion`。
-4. 校验 `data.json` 的 SHA-256。
+4. 未加密备份校验 `data.json` 的 SHA-256；加密备份先完成 GCM 认证解密再校验明文摘要。
 5. 完整解析 JSON 并验证必填字段、枚举、金额和外键。
 6. 生成导入预览：新增、更新、跳过、删除标记、冲突和不兼容数量。
 7. 用户确认预览后才开始合并。
@@ -641,7 +660,10 @@ ZIP 只提供压缩，不提供加密。导出界面必须提示备份中包含�
 - Android 发布配置不得把签名文件或密码提交到仓库。
 - iOS 签名证书和配置文件不进入仓库。
 - 备份导出后由用户选择保存位置，应用应明确提示其敏感性。
-- 如未来加入备份加密，必须使用经过审查的标准加密方案，不能自行设计算法。
+- 金额隐藏开启后首页默认不展示具体金额，并允许用户临时查看。
+- 应用进入后台时使用本地遮挡页，避免系统最近任务缩略图泄露财务数据。
+- 应用锁调用系统身份验证并允许系统设备密码回退；应用不读取或保存生物特征。
+- 加密备份必须使用经过审查的标准算法和带认证加密，不能自行设计算法。
 
 ## 18. UI 与视觉规范
 
@@ -820,14 +842,10 @@ V1 按个人多年使用规模设计：
 
 以下内容不阻塞 V1 开工，只能在核心版本稳定后评估：
 
-- 手动余额结转
-- 存款或理财撤回记录
-- 加密备份
-- 生物识别应用锁
 - 多币种
 - 云同步
 - 自动账单导入
-- 更复杂的预算与趋势建议
+- 储蓄目标和预测型建议
 
 这些能力不得提前污染 V1 的页面和数据模型；若未来引入，应通过新的业务记录类型和数据库迁移实现。
 

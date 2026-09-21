@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/features/backup/presentation/backup_card.dart';
 import 'package:xinflow/features/categories/presentation/category_management_card.dart';
+import 'package:xinflow/features/budgets/presentation/budget_management_card.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
+import 'package:xinflow/features/settings/presentation/data_management_card.dart';
+import 'package:xinflow/features/security/presentation/privacy_security_screen.dart';
 
 final class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -119,6 +122,12 @@ final class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
+          const BudgetManagementCard(),
+          const SizedBox(height: 12),
+          const DataManagementCard(),
+          const SizedBox(height: 12),
+          const PrivacySecurityCard(),
+          const SizedBox(height: 12),
           const CategoryManagementCard(),
           const SizedBox(height: 12),
           const BackupCard(),
@@ -127,7 +136,7 @@ final class SettingsScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
               title: Text('薪流 0.1.0'),
-              subtitle: Text('数据库版本 2 · 备份格式版本 1'),
+              subtitle: Text('数据库版本 3 · 备份格式版本 2'),
             ),
           ),
         ],
@@ -140,13 +149,14 @@ final class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     int current,
   ) async {
-    final controller = TextEditingController(text: current.toString());
+    var salaryDayText = current.toString();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('修改固定发薪日'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: salaryDayText,
+          onChanged: (value) => salaryDayText = value,
           autofocus: true,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
@@ -166,8 +176,7 @@ final class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
-    final value = int.tryParse(controller.text);
-    controller.dispose();
+    final value = int.tryParse(salaryDayText);
     if (confirmed != true) return;
     if (value == null || value < 1 || value > 31) {
       if (context.mounted) {

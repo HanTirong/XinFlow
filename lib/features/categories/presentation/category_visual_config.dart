@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
@@ -10,6 +11,7 @@ final class CategoryVisualConfig {
     required this.name,
     required this.icon,
     required this.iconColor,
+    required this.darkIconColor,
     required this.backgroundColor,
     required this.type,
   });
@@ -18,22 +20,18 @@ final class CategoryVisualConfig {
   final String name;
   final IconData icon;
   final Color iconColor;
+  final Color darkIconColor;
   final Color backgroundColor;
   final FlowType type;
 
   Color resolvedIconColor(BuildContext context) {
-    if (Theme.of(context).brightness != Brightness.dark) return iconColor;
-    return Color.lerp(iconColor, Colors.white, 0.28)!;
+    return Theme.of(context).brightness == Brightness.dark
+        ? darkIconColor
+        : iconColor;
   }
 
   Color resolvedBackgroundColor(BuildContext context) {
-    if (Theme.of(context).brightness != Brightness.dark) {
-      return backgroundColor;
-    }
-    return Color.alphaBlend(
-      iconColor.withAlpha(34),
-      Theme.of(context).colorScheme.surfaceContainerHigh,
-    );
+    return AppThemeTokens.of(context).categorySurface;
   }
 
   CategoryVisualConfig copyWith({String? name, FlowType? type}) =>
@@ -42,6 +40,7 @@ final class CategoryVisualConfig {
         name: name ?? this.name,
         icon: icon,
         iconColor: iconColor,
+        darkIconColor: darkIconColor,
         backgroundColor: backgroundColor,
         type: type ?? this.type,
       );
@@ -53,64 +52,72 @@ abstract final class CategoryVisuals {
       id: DefaultCategoryIds.food,
       name: '饮食',
       icon: Icons.restaurant_rounded,
-      iconColor: Color(0xFFB86149),
-      backgroundColor: Color(0xFFF7EBE7),
+      iconColor: Color(0xFFE76442),
+      darkIconColor: Color(0xFFFF8464),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
     DefaultCategoryIds.shopping: CategoryVisualConfig(
       id: DefaultCategoryIds.shopping,
       name: '购物',
       icon: Icons.shopping_bag_rounded,
-      iconColor: Color(0xFFB55777),
-      backgroundColor: Color(0xFFF7EAF0),
+      iconColor: Color(0xFFD93F7C),
+      darkIconColor: Color(0xFFFF5C9F),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
     DefaultCategoryIds.housing: CategoryVisualConfig(
       id: DefaultCategoryIds.housing,
       name: '住房',
       icon: Icons.home_rounded,
-      iconColor: Color(0xFF527BB5),
-      backgroundColor: Color(0xFFEAF0F7),
+      iconColor: Color(0xFF477CD7),
+      darkIconColor: Color(0xFF78A5FF),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
     DefaultCategoryIds.transport: CategoryVisualConfig(
       id: DefaultCategoryIds.transport,
       name: '交通',
       icon: Icons.directions_bus_rounded,
-      iconColor: Color(0xFF4C826C),
-      backgroundColor: Color(0xFFE8F1ED),
+      iconColor: Color(0xFF278769),
+      darkIconColor: Color(0xFF65D6AA),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
     DefaultCategoryIds.digital: CategoryVisualConfig(
       id: DefaultCategoryIds.digital,
       name: '数字服务',
       icon: Icons.laptop_mac_rounded,
-      iconColor: Color(0xFF7364A8),
-      backgroundColor: Color(0xFFEFEDF6),
+      iconColor: Color(0xFF7453C8),
+      darkIconColor: Color(0xFFA879FF),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
     DefaultCategoryIds.saving: CategoryVisualConfig(
       id: DefaultCategoryIds.saving,
       name: '存款',
       icon: Icons.savings_rounded,
-      iconColor: Color(0xFFA77932),
-      backgroundColor: Color(0xFFF6F0E5),
+      iconColor: Color(0xFFB77A0A),
+      darkIconColor: Color(0xFFFFC34D),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.saving,
     ),
     DefaultCategoryIds.investment: CategoryVisualConfig(
       id: DefaultCategoryIds.investment,
       name: '理财',
       icon: Icons.bar_chart_rounded,
-      iconColor: Color(0xFF3F7C8C),
-      backgroundColor: Color(0xFFE8F2F4),
+      iconColor: Color(0xFF15869B),
+      darkIconColor: Color(0xFF48CADC),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.investment,
     ),
     DefaultCategoryIds.other: CategoryVisualConfig(
       id: DefaultCategoryIds.other,
       name: '其他',
       icon: Icons.more_horiz_rounded,
-      iconColor: Color(0xFF667085),
-      backgroundColor: Color(0xFFEEF0F3),
+      iconColor: Color(0xFF657086),
+      darkIconColor: Color(0xFFC5CCDB),
+      backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
   };
@@ -130,11 +137,20 @@ abstract final class CategoryVisuals {
     }
 
     final configured = builtIn[categoryId];
-    if (configured != null) {
-      return configured.copyWith(
-        name: category?.name,
-        type: category?.flowType,
+    if (category != null) {
+      final colors = colorsForKey(category.colorKey, category.flowType);
+      return CategoryVisualConfig(
+        id: category.id,
+        name: category.name,
+        icon: iconForKey(category.iconKey),
+        iconColor: colors.$1,
+        darkIconColor: colors.$2,
+        backgroundColor: colors.$3,
+        type: category.flowType,
       );
+    }
+    if (configured != null) {
+      return configured.copyWith(name: fallbackName);
     }
 
     final type = category?.flowType ?? fallbackType;
@@ -142,14 +158,15 @@ abstract final class CategoryVisuals {
     return CategoryVisualConfig(
       id: categoryId,
       name: category?.name ?? fallbackName ?? '其他',
-      icon: _iconForKey(category?.iconKey),
+      icon: iconForKey(category?.iconKey),
       iconColor: colors.$1,
-      backgroundColor: colors.$2,
+      darkIconColor: colors.$2,
+      backgroundColor: colors.$3,
       type: type,
     );
   }
 
-  static IconData _iconForKey(String? iconKey) => switch (iconKey) {
+  static IconData iconForKey(String? iconKey) => switch (iconKey) {
     'restaurant' || 'food' => Icons.restaurant_rounded,
     'shopping_bag' || 'shopping' => Icons.shopping_bag_rounded,
     'home' || 'housing' => Icons.home_rounded,
@@ -158,13 +175,71 @@ abstract final class CategoryVisuals {
     'savings' || 'saving' => Icons.savings_rounded,
     'bar_chart' || 'investment' => Icons.bar_chart_rounded,
     'more_horiz' || 'other' => Icons.more_horiz_rounded,
+    'medical' => Icons.medical_services_rounded,
+    'school' => Icons.school_rounded,
+    'pets' => Icons.pets_rounded,
+    'sports' => Icons.sports_basketball_rounded,
     _ => Icons.category_rounded,
   };
 
-  static (Color, Color) _fallbackColors(FlowType type) => switch (type) {
-    FlowType.expense => (const Color(0xFF667085), const Color(0xFFEEF0F3)),
-    FlowType.saving => (const Color(0xFFA77932), const Color(0xFFF6F0E5)),
-    FlowType.investment => (const Color(0xFF3F7C8C), const Color(0xFFE8F2F4)),
+  static (Color, Color, Color) colorsForKey(
+    String colorKey,
+    FlowType fallbackType,
+  ) => switch (colorKey) {
+    'coral' => (
+      const Color(0xFFE76442),
+      const Color(0xFFFF8464),
+      AppPalette.lightSecondaryCard,
+    ),
+    'pink' => (
+      const Color(0xFFD93F7C),
+      const Color(0xFFFF5C9F),
+      AppPalette.lightSecondaryCard,
+    ),
+    'blue' => (
+      const Color(0xFF477CD7),
+      const Color(0xFF78A5FF),
+      AppPalette.lightSecondaryCard,
+    ),
+    'green' => (
+      const Color(0xFF278769),
+      const Color(0xFF65D6AA),
+      AppPalette.lightSecondaryCard,
+    ),
+    'purple' => (
+      const Color(0xFF7453C8),
+      const Color(0xFFA879FF),
+      AppPalette.lightSecondaryCard,
+    ),
+    'amber' => (
+      const Color(0xFFB77A0A),
+      const Color(0xFFFFC34D),
+      AppPalette.lightSecondaryCard,
+    ),
+    'cyan' => (
+      const Color(0xFF15869B),
+      const Color(0xFF48CADC),
+      AppPalette.lightSecondaryCard,
+    ),
+    _ => _fallbackColors(fallbackType),
+  };
+
+  static (Color, Color, Color) _fallbackColors(FlowType type) => switch (type) {
+    FlowType.expense => (
+      const Color(0xFF657086),
+      const Color(0xFFC5CCDB),
+      AppPalette.lightSecondaryCard,
+    ),
+    FlowType.saving => (
+      const Color(0xFFB77A0A),
+      const Color(0xFFFFC34D),
+      AppPalette.lightSecondaryCard,
+    ),
+    FlowType.investment => (
+      const Color(0xFF15869B),
+      const Color(0xFF48CADC),
+      AppPalette.lightSecondaryCard,
+    ),
   };
 }
 

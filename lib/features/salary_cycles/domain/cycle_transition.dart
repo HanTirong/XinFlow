@@ -15,11 +15,8 @@ final class CycleTransition {
 final class SalaryCyclePolicy {
   const SalaryCyclePolicy._();
 
-  /// Closes [currentCycle] and creates a new independent salary pool.
-  ///
-  /// The old remaining amount is persisted on the closed cycle but is never
-  /// included in the new salary amount. Persistence must write both returned
-  /// cycles inside one database transaction.
+  /// Closes [currentCycle] and creates the next salary pool. Positive remaining
+  /// money is only included when [carryPositiveRemaining] is explicitly true.
   static CycleTransition closeAndStartNext({
     required SalaryCycle currentCycle,
     required SalarySummary currentSummary,
@@ -28,6 +25,7 @@ final class SalaryCyclePolicy {
     required DateTime confirmedAt,
     required DateTime newCycleStartedAt,
     required LocalDate nextExpectedPayDate,
+    bool carryPositiveRemaining = false,
   }) {
     if (currentCycle.status != SalaryCycleStatus.active) {
       throw StateError('当前工资周期已经封存。');
@@ -52,6 +50,10 @@ final class SalaryCyclePolicy {
     final newCycle = SalaryCycle(
       id: newCycleId,
       salaryCents: newSalaryCents,
+      carryoverCents:
+          carryPositiveRemaining && currentSummary.remainingCents > 0
+          ? currentSummary.remainingCents
+          : 0,
       startedAt: newCycleStartedAt,
       expectedPayDate: nextExpectedPayDate,
       status: SalaryCycleStatus.active,

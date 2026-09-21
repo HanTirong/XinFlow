@@ -2,14 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/categories/presentation/category_visual_config.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+
+const _iconChoices = <String, IconData>{
+  'category': Icons.category_rounded,
+  'restaurant': Icons.restaurant_rounded,
+  'shopping_bag': Icons.shopping_bag_rounded,
+  'home': Icons.home_rounded,
+  'directions_bus': Icons.directions_bus_rounded,
+  'laptop': Icons.laptop_mac_rounded,
+  'savings': Icons.savings_rounded,
+  'bar_chart': Icons.bar_chart_rounded,
+  'medical': Icons.medical_services_rounded,
+  'school': Icons.school_rounded,
+  'pets': Icons.pets_rounded,
+  'sports': Icons.sports_basketball_rounded,
+  'more_horiz': Icons.more_horiz_rounded,
+};
+
+const _colorChoices = <String, Color>{
+  'neutral': Color(0xFF657086),
+  'coral': Color(0xFFE76442),
+  'pink': Color(0xFFD93F7C),
+  'blue': Color(0xFF477CD7),
+  'green': Color(0xFF278769),
+  'purple': Color(0xFF7453C8),
+  'amber': Color(0xFFB77A0A),
+  'cyan': Color(0xFF15869B),
+};
 
 Future<void> showCategoryManagementSheet(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => const _CategoryManagementSheet(),
+      builder: (_) => const _CategoryManagementSheet(),
     );
 
 final class CategoryManagementCard extends ConsumerWidget {
@@ -24,9 +52,9 @@ final class CategoryManagementCard extends ConsumerWidget {
         title: const Text('分类管理'),
         subtitle: Text(
           categories.when(
-            data: (value) => '${value.length} 个一级和二级分类',
+            data: (value) => '${value.length} 个分类，可调整图标、颜色与顺序',
             loading: () => '正在读取分类…',
-            error: (error, stackTrace) => '分类读取失败',
+            error: (_, _) => '分类读取失败',
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -43,7 +71,7 @@ final class _CategoryManagementSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(allCategoriesProvider);
     return FractionallySizedBox(
-      heightFactor: 0.88,
+      heightFactor: 0.9,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
         child: Column(
@@ -60,45 +88,80 @@ final class _CategoryManagementSheet extends ConsumerWidget {
                 FilledButton.icon(
                   onPressed: categories.value == null
                       ? null
-                      : () => _addCategory(context, ref, categories.value!),
+                      : () => _edit(context, ref, categories.value!),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增'),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
+            Text(
+              '一级分类可加入首页快捷区；二级分类可更换所属一级分类。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 10),
             Expanded(
               child: categories.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stackTrace) => Center(child: Text('$error')),
+                error: (error, _) => Center(child: Text('$error')),
                 data: (items) => ListView.builder(
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final category = items[index];
+                    final siblings = items
+                        .where((item) => item.parentId == category.parentId)
+                        .toList();
+                    final siblingIndex = siblings.indexWhere(
+                      (item) => item.id == category.id,
+                    );
                     final parent = category.parentId == null
                         ? null
                         : items
                               .where((item) => item.id == category.parentId)
                               .firstOrNull;
+                    final visual = CategoryVisuals.resolve(
+                      categoryId: category.id,
+                      categories: items,
+                    );
                     return ListTile(
                       contentPadding: EdgeInsets.only(
                         left: category.isTopLevel ? 0 : 28,
                       ),
-                      leading: Icon(
-                        category.isTopLevel
-                            ? Icons.folder_outlined
-                            : Icons.subdirectory_arrow_right_rounded,
-                      ),
+                      leading: CategoryIconBadge(config: visual),
                       title: Text(category.name),
                       subtitle: Text(
                         [
                           _flowLabel(category.flowType),
                           if (parent != null) '上级：${parent.name}',
+                          if (category.showOnHome) '首页快捷项',
                           if (!category.isActive) '已停用',
                         ].join(' · '),
                       ),
-                      trailing: const Icon(Icons.edit_outlined),
-                      onTap: () => _editCategory(context, ref, category),
+                      trailing: Wrap(
+                        spacing: 0,
+                        children: [
+                          IconButton(
+                            tooltip: '上移',
+                            onPressed: siblingIndex <= 0
+                                ? null
+                                : () => _move(ref, siblings, siblingIndex, -1),
+                            icon: const Icon(Icons.arrow_upward_rounded),
+                          ),
+                          IconButton(
+                            tooltip: '下移',
+                            onPressed: siblingIndex >= siblings.length - 1
+                                ? null
+                                : () => _move(ref, siblings, siblingIndex, 1),
+                            icon: const Icon(Icons.arrow_downward_rounded),
+                          ),
+                          IconButton(
+                            tooltip: '编辑',
+                            onPressed: () =>
+                                _edit(context, ref, items, category: category),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -110,66 +173,80 @@ final class _CategoryManagementSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _addCategory(
+  Future<void> _move(
+    WidgetRef ref,
+    List<Category> siblings,
+    int index,
+    int delta,
+  ) async {
+    final reordered = [...siblings];
+    final item = reordered.removeAt(index);
+    reordered.insert(index + delta, item);
+    await ref.read(categoryRepositoryProvider).reorder(reordered);
+    _refresh(ref);
+  }
+
+  Future<void> _edit(
     BuildContext context,
     WidgetRef ref,
-    List<Category> categories,
-  ) async {
-    final nameController = TextEditingController();
-    var flowType = FlowType.expense;
-    String? parentId;
+    List<Category> categories, {
+    Category? category,
+  }) async {
+    var name = category?.name ?? '';
+    var flowType = category?.flowType ?? FlowType.expense;
+    var parentId = category?.parentId;
+    var iconKey = category?.iconKey ?? 'category';
+    var colorKey = category?.colorKey ?? 'neutral';
+    var active = category?.isActive ?? true;
+    var showOnHome = category?.showOnHome ?? false;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           final parents = categories.where(
-            (category) =>
-                category.isTopLevel &&
-                category.isActive &&
-                category.flowType == flowType,
+            (item) =>
+                item.isTopLevel &&
+                item.isActive &&
+                item.flowType == flowType &&
+                item.id != category?.id,
           );
-          if (parentId != null &&
-              !parents.any((category) => category.id == parentId)) {
+          if (parentId != null && !parents.any((item) => item.id == parentId)) {
             parentId = null;
           }
           return AlertDialog(
-            title: const Text('新增分类'),
+            title: Text(category == null ? '新增分类' : '编辑分类'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: nameController,
+                  TextFormField(
+                    initialValue: name,
+                    onChanged: (value) => name = value,
                     autofocus: true,
                     maxLength: 30,
                     decoration: const InputDecoration(labelText: '分类名称'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   DropdownButtonFormField<FlowType>(
                     initialValue: flowType,
                     decoration: const InputDecoration(labelText: '性质'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: FlowType.expense,
-                        child: Text('消费'),
-                      ),
-                      DropdownMenuItem(
-                        value: FlowType.saving,
-                        child: Text('存款'),
-                      ),
-                      DropdownMenuItem(
-                        value: FlowType.investment,
-                        child: Text('理财'),
-                      ),
-                    ],
-                    onChanged: (value) => setState(() {
-                      flowType = value!;
-                      parentId = null;
-                    }),
+                    items: FlowType.values
+                        .map(
+                          (type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(_flowLabel(type)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: category == null
+                        ? (value) => setState(() {
+                            flowType = value!;
+                            parentId = null;
+                          })
+                        : null,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   DropdownButtonFormField<String?>(
-                    key: ValueKey(flowType),
                     initialValue: parentId,
                     decoration: const InputDecoration(labelText: '上级分类（可选）'),
                     items: [
@@ -183,108 +260,111 @@ final class _CategoryManagementSheet extends ConsumerWidget {
                           child: Text(parent.name),
                         ),
                     ],
-                    onChanged: (value) => setState(() => parentId = value),
+                    onChanged: (value) => setState(() {
+                      parentId = value;
+                      if (value != null) showOnHome = false;
+                    }),
                   ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: iconKey,
+                    decoration: const InputDecoration(labelText: '图标'),
+                    items: [
+                      for (final entry in _iconChoices.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Row(
+                            children: [
+                              Icon(entry.value),
+                              const SizedBox(width: 10),
+                              Text(entry.key),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => iconKey = value!),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    children: [
+                      for (final entry in _colorChoices.entries)
+                        ChoiceChip(
+                          selected: colorKey == entry.key,
+                          label: CircleAvatar(
+                            radius: 9,
+                            backgroundColor: entry.value,
+                          ),
+                          onSelected: (_) =>
+                              setState(() => colorKey = entry.key),
+                        ),
+                    ],
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('用于新流水'),
+                    value: active,
+                    onChanged: (value) => setState(() => active = value),
+                  ),
+                  if (parentId == null)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('显示在首页快捷区'),
+                      value: showOnHome,
+                      onChanged: (value) => setState(() => showOnHome = value),
+                    ),
                 ],
               ),
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () => Navigator.pop(context, false),
                 child: const Text('取消'),
               ),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('新增'),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('保存'),
               ),
             ],
           );
         },
       ),
     );
-    final name = nameController.text.trim();
-    nameController.dispose();
-    if (confirmed != true || name.isEmpty) return;
-
-    final siblings = categories.where(
-      (category) => category.parentId == parentId,
-    );
+    final trimmed = name.trim();
+    if (confirmed != true || trimmed.isEmpty) return;
+    final siblings = categories.where((item) => item.parentId == parentId);
     final sortOrder =
+        category?.sortOrder ??
         siblings.fold<int>(
-          0,
-          (highest, category) =>
-              category.sortOrder > highest ? category.sortOrder : highest,
-        ) +
-        10;
-    await ref
-        .read(categoryRepositoryProvider)
-        .add(
-          Category(
-            id: ref.read(idGeneratorProvider).next(),
-            parentId: parentId,
-            name: name,
-            flowType: flowType,
-            iconKey: 'category',
-            sortOrder: sortOrder,
-            isSystem: false,
-          ),
-        );
-    ref
-      ..invalidate(allCategoriesProvider)
-      ..invalidate(activeCategoriesProvider);
+              0,
+              (max, item) => item.sortOrder > max ? item.sortOrder : max,
+            ) +
+            10;
+    final updated = Category(
+      id: category?.id ?? ref.read(idGeneratorProvider).next(),
+      parentId: parentId,
+      name: trimmed,
+      flowType: flowType,
+      iconKey: iconKey,
+      colorKey: colorKey,
+      sortOrder: sortOrder,
+      isSystem: category?.isSystem ?? false,
+      isActive: active,
+      showOnHome: parentId == null && showOnHome,
+    );
+    if (category == null) {
+      await ref.read(categoryRepositoryProvider).add(updated);
+    } else {
+      await ref.read(categoryRepositoryProvider).update(updated);
+    }
+    _refresh(ref);
   }
 
-  Future<void> _editCategory(
-    BuildContext context,
-    WidgetRef ref,
-    Category category,
-  ) async {
-    final controller = TextEditingController(text: category.name);
-    var isActive = category.isActive;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('编辑分类'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLength: 30,
-                decoration: const InputDecoration(labelText: '分类名称'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('用于新流水'),
-                value: isActive,
-                onChanged: (value) => setState(() => isActive = value),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-    final name = controller.text.trim();
-    controller.dispose();
-    if (confirmed != true || name.isEmpty) return;
-    await ref
-        .read(categoryRepositoryProvider)
-        .updateNameAndState(id: category.id, name: name, isActive: isActive);
+  void _refresh(WidgetRef ref) {
     ref
       ..invalidate(allCategoriesProvider)
-      ..invalidate(activeCategoriesProvider);
+      ..invalidate(activeCategoriesProvider)
+      ..invalidate(homeSnapshotProvider);
   }
 }
 

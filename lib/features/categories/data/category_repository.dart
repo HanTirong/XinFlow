@@ -14,4 +14,8 @@ abstract interface class CategoryRepository {
     required String name,
     required bool isActive,
   });
+
+  Future<void> update(Category category);
+
+  Future<void> reorder(List<Category> categories);
 }

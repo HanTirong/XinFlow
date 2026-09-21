@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:xinflow/core/clock/clock.dart';
 import 'package:xinflow/core/database/app_database.dart';
 import 'package:xinflow/core/id/id_generator.dart';
@@ -98,6 +99,94 @@ void main() {
       );
     },
   );
+
+  test('migrates a real version 2 schema to version 3', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'xinflow_v2_to_v3_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/xinflow.sqlite');
+    final raw = sqlite.sqlite3.open(file.path);
+    raw.execute('''
+      CREATE TABLE salary_cycles (
+        id TEXT NOT NULL PRIMARY KEY,
+        salary_cents INTEGER NOT NULL CHECK (salary_cents >= 0),
+        started_at INTEGER NOT NULL,
+        expected_pay_date TEXT NOT NULL,
+        closed_at INTEGER,
+        status TEXT NOT NULL CHECK (status IN ('active', 'closed')),
+        final_remaining_cents INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE categories (
+        id TEXT NOT NULL PRIMARY KEY,
+        parent_id TEXT REFERENCES categories(id),
+        name TEXT NOT NULL,
+        flow_type TEXT NOT NULL CHECK (flow_type IN ('expense', 'saving', 'investment')),
+        icon_key TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        is_system INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE transactions (
+        id TEXT NOT NULL PRIMARY KEY,
+        salary_cycle_id TEXT NOT NULL REFERENCES salary_cycles(id),
+        entry_kind TEXT NOT NULL CHECK (entry_kind IN ('allocation', 'refund')),
+        flow_type TEXT NOT NULL CHECK (flow_type IN ('expense', 'saving', 'investment')),
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        category_id TEXT NOT NULL REFERENCES categories(id),
+        subcategory_id TEXT REFERENCES categories(id),
+        reverses_transaction_id TEXT REFERENCES transactions(id),
+        occurred_at INTEGER NOT NULL,
+        occurred_on TEXT NOT NULL,
+        note TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE app_settings (
+        singleton_id INTEGER NOT NULL PRIMARY KEY CHECK (singleton_id = 1),
+        salary_day INTEGER NOT NULL CHECK (salary_day BETWEEN 1 AND 31),
+        currency_code TEXT NOT NULL DEFAULT 'CNY' CHECK (currency_code = 'CNY'),
+        onboarding_completed INTEGER NOT NULL,
+        theme_mode TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark')),
+        updated_at INTEGER NOT NULL
+      );
+      PRAGMA user_version = 2;
+    ''');
+    final timestamp = DateTime.utc(2026, 9, 10).millisecondsSinceEpoch;
+    raw.execute(
+      "INSERT INTO app_settings VALUES (1, 10, 'CNY', 1, 'system', ?)",
+      [timestamp],
+    );
+    raw.execute(
+      "INSERT INTO salary_cycles VALUES ('cycle-v2', 100000, ?, '2026-10-10', NULL, 'active', NULL, ?, ?, NULL)",
+      [timestamp, timestamp, timestamp],
+    );
+    raw.close();
+
+    final upgraded = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final bootstrap = await DriftOnboardingRepository(upgraded).loadBootstrap();
+    expect(bootstrap.activeCycle!.carryoverCents, 0);
+    expect(
+      (await upgraded.select(upgraded.appSettingRecords).getSingle())
+          .appLockEnabled,
+      isFalse,
+    );
+    expect(await upgraded.select(upgraded.budgetRecords).get(), isEmpty);
+    final transactionSql = await upgraded
+        .customSelect(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'transactions'",
+        )
+        .getSingle();
+    expect(transactionSql.read<String>('sql'), contains('withdrawal'));
+  });
 
   test(
     'completes onboarding atomically and persists one active cycle',

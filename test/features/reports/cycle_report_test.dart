@@ -18,8 +18,18 @@ void main() {
       salaryCents: 800000,
       transactions: const [],
     );
+    final previousCycle = SalaryCycle(
+      id: 'cycle-previous',
+      salaryCents: 800000,
+      startedAt: DateTime.utc(2026, 8, 1),
+      expectedPayDate: const LocalDate(2026, 9, 1),
+      status: SalaryCycleStatus.closed,
+      closedAt: DateTime.utc(2026, 9, 1),
+      finalRemainingCents: 800000,
+    );
     final report = CycleReport.fromData(
       cycle: cycle,
+      previousCycle: previousCycle,
       previousSummary: previous,
       transactions: [
         _entry(id: 'food-1', amountCents: 10000, categoryId: 'food'),
@@ -43,6 +53,7 @@ void main() {
     expect(report.summary.savingCents, 50000);
     expect(report.expenseByCategory, {'food': 7500, 'shopping': 4000});
     expect(report.dailyNetExpense[const LocalDate(2026, 9, 20)], 11500);
+    expect(report.previousCycle, same(previousCycle));
     expect(report.previousSummary, same(previous));
   });
 }

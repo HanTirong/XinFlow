@@ -21,7 +21,9 @@ void main() {
     expect(shopping.icon, Icons.shopping_bag_rounded);
     expect(food.icon, isNot(shopping.icon));
     expect(food.iconColor, isNot(shopping.iconColor));
-    expect(food.backgroundColor, isNot(shopping.backgroundColor));
+    expect(food.darkIconColor, const Color(0xFFFF8464));
+    expect(shopping.darkIconColor, const Color(0xFFFF5C9F));
+    expect(food.backgroundColor, shopping.backgroundColor);
   });
 
   test('renamed and custom categories keep using the central resolver', () {

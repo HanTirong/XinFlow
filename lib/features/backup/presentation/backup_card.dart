@@ -23,7 +23,7 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
           ListTile(
             leading: const Icon(Icons.backup_outlined),
             title: const Text('导出 XinFlow 备份'),
-            subtitle: const Text('工资周期、流水、分类与设置会写入一个带完整性校验的文件'),
+            subtitle: const Text('支持密码加密；工资周期、流水、分类、预算与设置一并导出'),
             trailing: _isWorking
                 ? const SizedBox.square(
                     dimension: 20,
@@ -61,9 +61,13 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
   }
 
   Future<void> _exportBackup() async {
+    final password = await _chooseExportPassword();
+    if (password == _cancelledPassword) return;
     setState(() => _isWorking = true);
     try {
-      final artifact = await ref.read(backupServiceProvider).exportBackup();
+      final artifact = await ref
+          .read(backupServiceProvider)
+          .exportBackup(password: password);
       final uri = await FilePicker.saveFile(
         dialogTitle: '保存 XinFlow 备份',
         fileName: artifact.fileName,
@@ -71,6 +75,9 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
         mimeType: 'application/zip',
       );
       if (uri == null || !mounted) return;
+      await ref
+          .read(settingsRepositoryProvider)
+          .markBackupCreated(DateTime.now());
       _showMessage(
         '备份已导出：${artifact.counts.cycles} 个周期、'
         '${artifact.counts.transactions} 条流水。',
@@ -91,9 +98,17 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
         allowedExtensions: const ['xinflow'],
       );
       if (file == null || !mounted) return;
-      final preview = await ref
-          .read(backupServiceProvider)
-          .previewImport(await file.readAsBytes());
+      final bytes = await file.readAsBytes();
+      BackupImportPreview preview;
+      try {
+        preview = await ref.read(backupServiceProvider).previewImport(bytes);
+      } on BackupPasswordRequired {
+        final password = await _askImportPassword();
+        if (password == null) return;
+        preview = await ref
+            .read(backupServiceProvider)
+            .previewImport(bytes, password: password);
+      }
       if (!mounted) return;
       final mode = await _chooseImportMode(preview);
       if (mode == null || !mounted) return;
@@ -180,6 +195,9 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
       ..invalidate(salaryCyclesProvider)
       ..invalidate(cycleTransactionsProvider)
       ..invalidate(cycleReportProvider)
+      ..invalidate(crossCycleReportProvider)
+      ..invalidate(appSettingsProvider)
+      ..invalidate(localDataOverviewProvider)
       ..invalidate(activeCategoriesProvider)
       ..invalidate(allCategoriesProvider);
   }
@@ -193,6 +211,99 @@ final class _BackupCardState extends ConsumerState<BackupCard> {
           backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
+  }
+
+  static const _cancelledPassword = '__xinflow_cancelled__';
+
+  Future<String?> _chooseExportPassword() async {
+    var password = '';
+    var confirm = '';
+    String? error;
+    final result = await showDialog<String?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('保护备份文件'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('建议设置至少 8 个字符的密码。密码丢失后无法恢复备份。'),
+              const SizedBox(height: 12),
+              TextFormField(
+                onChanged: (value) => password = value,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '备份密码'),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                onChanged: (value) => confirm = value,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '再次输入密码'),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, _cancelledPassword),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('不加密导出'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (password.length < 8) {
+                  setState(() => error = '密码至少需要 8 个字符。');
+                } else if (password != confirm) {
+                  setState(() => error = '两次输入的密码不一致。');
+                } else {
+                  Navigator.pop(context, password);
+                }
+              },
+              child: const Text('加密导出'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result;
+  }
+
+  Future<String?> _askImportPassword() async {
+    var password = '';
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('输入备份密码'),
+        content: TextFormField(
+          onChanged: (value) => password = value,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: '密码'),
+          onFieldSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, password),
+            child: const Text('解锁'),
+          ),
+        ],
+      ),
+    );
+    return result;
   }
 }
 

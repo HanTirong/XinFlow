@@ -30,6 +30,19 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL CHECK (salary_cents >= 0)',
   );
+  static const VerificationMeta _carryoverCentsMeta = const VerificationMeta(
+    'carryoverCents',
+  );
+  @override
+  late final GeneratedColumn<int> carryoverCents = GeneratedColumn<int>(
+    'carryover_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (carryover_cents >= 0)',
+    defaultValue: const CustomExpression('0'),
+  );
   static const VerificationMeta _startedAtMeta = const VerificationMeta(
     'startedAt',
   );
@@ -120,6 +133,7 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
   List<GeneratedColumn> get $columns => [
     id,
     salaryCents,
+    carryoverCents,
     startedAt,
     expectedPayDate,
     closedAt,
@@ -156,6 +170,15 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
       );
     } else if (isInserting) {
       context.missing(_salaryCentsMeta);
+    }
+    if (data.containsKey('carryover_cents')) {
+      context.handle(
+        _carryoverCentsMeta,
+        carryoverCents.isAcceptableOrUnknown(
+          data['carryover_cents']!,
+          _carryoverCentsMeta,
+        ),
+      );
     }
     if (data.containsKey('started_at')) {
       context.handle(
@@ -238,6 +261,10 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
         DriftSqlType.int,
         data['${effectivePrefix}salary_cents'],
       )!,
+      carryoverCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}carryover_cents'],
+      )!,
       startedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}started_at'],
@@ -283,6 +310,7 @@ class SalaryCycleRecord extends DataClass
     implements Insertable<SalaryCycleRecord> {
   final String id;
   final int salaryCents;
+  final int carryoverCents;
   final int startedAt;
   final String expectedPayDate;
   final int? closedAt;
@@ -294,6 +322,7 @@ class SalaryCycleRecord extends DataClass
   const SalaryCycleRecord({
     required this.id,
     required this.salaryCents,
+    required this.carryoverCents,
     required this.startedAt,
     required this.expectedPayDate,
     this.closedAt,
@@ -308,6 +337,7 @@ class SalaryCycleRecord extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['salary_cents'] = Variable<int>(salaryCents);
+    map['carryover_cents'] = Variable<int>(carryoverCents);
     map['started_at'] = Variable<int>(startedAt);
     map['expected_pay_date'] = Variable<String>(expectedPayDate);
     if (!nullToAbsent || closedAt != null) {
@@ -329,6 +359,7 @@ class SalaryCycleRecord extends DataClass
     return SalaryCycleRecordsCompanion(
       id: Value(id),
       salaryCents: Value(salaryCents),
+      carryoverCents: Value(carryoverCents),
       startedAt: Value(startedAt),
       expectedPayDate: Value(expectedPayDate),
       closedAt: closedAt == null && nullToAbsent
@@ -354,6 +385,7 @@ class SalaryCycleRecord extends DataClass
     return SalaryCycleRecord(
       id: serializer.fromJson<String>(json['id']),
       salaryCents: serializer.fromJson<int>(json['salaryCents']),
+      carryoverCents: serializer.fromJson<int>(json['carryoverCents']),
       startedAt: serializer.fromJson<int>(json['startedAt']),
       expectedPayDate: serializer.fromJson<String>(json['expectedPayDate']),
       closedAt: serializer.fromJson<int?>(json['closedAt']),
@@ -372,6 +404,7 @@ class SalaryCycleRecord extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'salaryCents': serializer.toJson<int>(salaryCents),
+      'carryoverCents': serializer.toJson<int>(carryoverCents),
       'startedAt': serializer.toJson<int>(startedAt),
       'expectedPayDate': serializer.toJson<String>(expectedPayDate),
       'closedAt': serializer.toJson<int?>(closedAt),
@@ -386,6 +419,7 @@ class SalaryCycleRecord extends DataClass
   SalaryCycleRecord copyWith({
     String? id,
     int? salaryCents,
+    int? carryoverCents,
     int? startedAt,
     String? expectedPayDate,
     Value<int?> closedAt = const Value.absent(),
@@ -397,6 +431,7 @@ class SalaryCycleRecord extends DataClass
   }) => SalaryCycleRecord(
     id: id ?? this.id,
     salaryCents: salaryCents ?? this.salaryCents,
+    carryoverCents: carryoverCents ?? this.carryoverCents,
     startedAt: startedAt ?? this.startedAt,
     expectedPayDate: expectedPayDate ?? this.expectedPayDate,
     closedAt: closedAt.present ? closedAt.value : this.closedAt,
@@ -414,6 +449,9 @@ class SalaryCycleRecord extends DataClass
       salaryCents: data.salaryCents.present
           ? data.salaryCents.value
           : this.salaryCents,
+      carryoverCents: data.carryoverCents.present
+          ? data.carryoverCents.value
+          : this.carryoverCents,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
       expectedPayDate: data.expectedPayDate.present
           ? data.expectedPayDate.value
@@ -434,6 +472,7 @@ class SalaryCycleRecord extends DataClass
     return (StringBuffer('SalaryCycleRecord(')
           ..write('id: $id, ')
           ..write('salaryCents: $salaryCents, ')
+          ..write('carryoverCents: $carryoverCents, ')
           ..write('startedAt: $startedAt, ')
           ..write('expectedPayDate: $expectedPayDate, ')
           ..write('closedAt: $closedAt, ')
@@ -450,6 +489,7 @@ class SalaryCycleRecord extends DataClass
   int get hashCode => Object.hash(
     id,
     salaryCents,
+    carryoverCents,
     startedAt,
     expectedPayDate,
     closedAt,
@@ -465,6 +505,7 @@ class SalaryCycleRecord extends DataClass
       (other is SalaryCycleRecord &&
           other.id == this.id &&
           other.salaryCents == this.salaryCents &&
+          other.carryoverCents == this.carryoverCents &&
           other.startedAt == this.startedAt &&
           other.expectedPayDate == this.expectedPayDate &&
           other.closedAt == this.closedAt &&
@@ -478,6 +519,7 @@ class SalaryCycleRecord extends DataClass
 class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   final Value<String> id;
   final Value<int> salaryCents;
+  final Value<int> carryoverCents;
   final Value<int> startedAt;
   final Value<String> expectedPayDate;
   final Value<int?> closedAt;
@@ -490,6 +532,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   const SalaryCycleRecordsCompanion({
     this.id = const Value.absent(),
     this.salaryCents = const Value.absent(),
+    this.carryoverCents = const Value.absent(),
     this.startedAt = const Value.absent(),
     this.expectedPayDate = const Value.absent(),
     this.closedAt = const Value.absent(),
@@ -503,6 +546,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   SalaryCycleRecordsCompanion.insert({
     required String id,
     required int salaryCents,
+    this.carryoverCents = const Value.absent(),
     required int startedAt,
     required String expectedPayDate,
     this.closedAt = const Value.absent(),
@@ -522,6 +566,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   static Insertable<SalaryCycleRecord> custom({
     Expression<String>? id,
     Expression<int>? salaryCents,
+    Expression<int>? carryoverCents,
     Expression<int>? startedAt,
     Expression<String>? expectedPayDate,
     Expression<int>? closedAt,
@@ -535,6 +580,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (salaryCents != null) 'salary_cents': salaryCents,
+      if (carryoverCents != null) 'carryover_cents': carryoverCents,
       if (startedAt != null) 'started_at': startedAt,
       if (expectedPayDate != null) 'expected_pay_date': expectedPayDate,
       if (closedAt != null) 'closed_at': closedAt,
@@ -551,6 +597,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   SalaryCycleRecordsCompanion copyWith({
     Value<String>? id,
     Value<int>? salaryCents,
+    Value<int>? carryoverCents,
     Value<int>? startedAt,
     Value<String>? expectedPayDate,
     Value<int?>? closedAt,
@@ -564,6 +611,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return SalaryCycleRecordsCompanion(
       id: id ?? this.id,
       salaryCents: salaryCents ?? this.salaryCents,
+      carryoverCents: carryoverCents ?? this.carryoverCents,
       startedAt: startedAt ?? this.startedAt,
       expectedPayDate: expectedPayDate ?? this.expectedPayDate,
       closedAt: closedAt ?? this.closedAt,
@@ -584,6 +632,9 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     }
     if (salaryCents.present) {
       map['salary_cents'] = Variable<int>(salaryCents.value);
+    }
+    if (carryoverCents.present) {
+      map['carryover_cents'] = Variable<int>(carryoverCents.value);
     }
     if (startedAt.present) {
       map['started_at'] = Variable<int>(startedAt.value);
@@ -620,6 +671,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return (StringBuffer('SalaryCycleRecordsCompanion(')
           ..write('id: $id, ')
           ..write('salaryCents: $salaryCents, ')
+          ..write('carryoverCents: $carryoverCents, ')
           ..write('startedAt: $startedAt, ')
           ..write('expectedPayDate: $expectedPayDate, ')
           ..write('closedAt: $closedAt, ')
@@ -696,6 +748,18 @@ class $CategoryRecordsTable extends CategoryRecords
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _colorKeyMeta = const VerificationMeta(
+    'colorKey',
+  );
+  @override
+  late final GeneratedColumn<String> colorKey = GeneratedColumn<String>(
+    'color_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('neutral'),
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -706,6 +770,21 @@ class $CategoryRecordsTable extends CategoryRecords
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _showOnHomeMeta = const VerificationMeta(
+    'showOnHome',
+  );
+  @override
+  late final GeneratedColumn<bool> showOnHome = GeneratedColumn<bool>(
+    'show_on_home',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_on_home" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
   );
   static const VerificationMeta _isSystemMeta = const VerificationMeta(
     'isSystem',
@@ -776,7 +855,9 @@ class $CategoryRecordsTable extends CategoryRecords
     name,
     flowType,
     iconKey,
+    colorKey,
     sortOrder,
+    showOnHome,
     isSystem,
     isActive,
     createdAt,
@@ -830,6 +911,12 @@ class $CategoryRecordsTable extends CategoryRecords
     } else if (isInserting) {
       context.missing(_iconKeyMeta);
     }
+    if (data.containsKey('color_key')) {
+      context.handle(
+        _colorKeyMeta,
+        colorKey.isAcceptableOrUnknown(data['color_key']!, _colorKeyMeta),
+      );
+    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -837,6 +924,15 @@ class $CategoryRecordsTable extends CategoryRecords
       );
     } else if (isInserting) {
       context.missing(_sortOrderMeta);
+    }
+    if (data.containsKey('show_on_home')) {
+      context.handle(
+        _showOnHomeMeta,
+        showOnHome.isAcceptableOrUnknown(
+          data['show_on_home']!,
+          _showOnHomeMeta,
+        ),
+      );
     }
     if (data.containsKey('is_system')) {
       context.handle(
@@ -903,9 +999,17 @@ class $CategoryRecordsTable extends CategoryRecords
         DriftSqlType.string,
         data['${effectivePrefix}icon_key'],
       )!,
+      colorKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color_key'],
+      )!,
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
+      )!,
+      showOnHome: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_on_home'],
       )!,
       isSystem: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
@@ -942,7 +1046,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
   final String name;
   final String flowType;
   final String iconKey;
+  final String colorKey;
   final int sortOrder;
+  final bool showOnHome;
   final bool isSystem;
   final bool isActive;
   final int createdAt;
@@ -954,7 +1060,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
     required this.name,
     required this.flowType,
     required this.iconKey,
+    required this.colorKey,
     required this.sortOrder,
+    required this.showOnHome,
     required this.isSystem,
     required this.isActive,
     required this.createdAt,
@@ -971,7 +1079,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
     map['name'] = Variable<String>(name);
     map['flow_type'] = Variable<String>(flowType);
     map['icon_key'] = Variable<String>(iconKey);
+    map['color_key'] = Variable<String>(colorKey);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['show_on_home'] = Variable<bool>(showOnHome);
     map['is_system'] = Variable<bool>(isSystem);
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<int>(createdAt);
@@ -991,7 +1101,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
       name: Value(name),
       flowType: Value(flowType),
       iconKey: Value(iconKey),
+      colorKey: Value(colorKey),
       sortOrder: Value(sortOrder),
+      showOnHome: Value(showOnHome),
       isSystem: Value(isSystem),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
@@ -1013,7 +1125,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
       name: serializer.fromJson<String>(json['name']),
       flowType: serializer.fromJson<String>(json['flowType']),
       iconKey: serializer.fromJson<String>(json['iconKey']),
+      colorKey: serializer.fromJson<String>(json['colorKey']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      showOnHome: serializer.fromJson<bool>(json['showOnHome']),
       isSystem: serializer.fromJson<bool>(json['isSystem']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
@@ -1030,7 +1144,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
       'name': serializer.toJson<String>(name),
       'flowType': serializer.toJson<String>(flowType),
       'iconKey': serializer.toJson<String>(iconKey),
+      'colorKey': serializer.toJson<String>(colorKey),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'showOnHome': serializer.toJson<bool>(showOnHome),
       'isSystem': serializer.toJson<bool>(isSystem),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<int>(createdAt),
@@ -1045,7 +1161,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
     String? name,
     String? flowType,
     String? iconKey,
+    String? colorKey,
     int? sortOrder,
+    bool? showOnHome,
     bool? isSystem,
     bool? isActive,
     int? createdAt,
@@ -1057,7 +1175,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
     name: name ?? this.name,
     flowType: flowType ?? this.flowType,
     iconKey: iconKey ?? this.iconKey,
+    colorKey: colorKey ?? this.colorKey,
     sortOrder: sortOrder ?? this.sortOrder,
+    showOnHome: showOnHome ?? this.showOnHome,
     isSystem: isSystem ?? this.isSystem,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
@@ -1071,7 +1191,11 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
       name: data.name.present ? data.name.value : this.name,
       flowType: data.flowType.present ? data.flowType.value : this.flowType,
       iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
+      colorKey: data.colorKey.present ? data.colorKey.value : this.colorKey,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      showOnHome: data.showOnHome.present
+          ? data.showOnHome.value
+          : this.showOnHome,
       isSystem: data.isSystem.present ? data.isSystem.value : this.isSystem,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -1088,7 +1212,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
           ..write('name: $name, ')
           ..write('flowType: $flowType, ')
           ..write('iconKey: $iconKey, ')
+          ..write('colorKey: $colorKey, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('showOnHome: $showOnHome, ')
           ..write('isSystem: $isSystem, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -1105,7 +1231,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
     name,
     flowType,
     iconKey,
+    colorKey,
     sortOrder,
+    showOnHome,
     isSystem,
     isActive,
     createdAt,
@@ -1121,7 +1249,9 @@ class CategoryRecord extends DataClass implements Insertable<CategoryRecord> {
           other.name == this.name &&
           other.flowType == this.flowType &&
           other.iconKey == this.iconKey &&
+          other.colorKey == this.colorKey &&
           other.sortOrder == this.sortOrder &&
+          other.showOnHome == this.showOnHome &&
           other.isSystem == this.isSystem &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
@@ -1135,7 +1265,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
   final Value<String> name;
   final Value<String> flowType;
   final Value<String> iconKey;
+  final Value<String> colorKey;
   final Value<int> sortOrder;
+  final Value<bool> showOnHome;
   final Value<bool> isSystem;
   final Value<bool> isActive;
   final Value<int> createdAt;
@@ -1148,7 +1280,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
     this.name = const Value.absent(),
     this.flowType = const Value.absent(),
     this.iconKey = const Value.absent(),
+    this.colorKey = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.showOnHome = const Value.absent(),
     this.isSystem = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1162,7 +1296,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
     required String name,
     required String flowType,
     required String iconKey,
+    this.colorKey = const Value.absent(),
     required int sortOrder,
+    this.showOnHome = const Value.absent(),
     required bool isSystem,
     this.isActive = const Value.absent(),
     required int createdAt,
@@ -1183,7 +1319,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
     Expression<String>? name,
     Expression<String>? flowType,
     Expression<String>? iconKey,
+    Expression<String>? colorKey,
     Expression<int>? sortOrder,
+    Expression<bool>? showOnHome,
     Expression<bool>? isSystem,
     Expression<bool>? isActive,
     Expression<int>? createdAt,
@@ -1197,7 +1335,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
       if (name != null) 'name': name,
       if (flowType != null) 'flow_type': flowType,
       if (iconKey != null) 'icon_key': iconKey,
+      if (colorKey != null) 'color_key': colorKey,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (showOnHome != null) 'show_on_home': showOnHome,
       if (isSystem != null) 'is_system': isSystem,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
@@ -1213,7 +1353,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
     Value<String>? name,
     Value<String>? flowType,
     Value<String>? iconKey,
+    Value<String>? colorKey,
     Value<int>? sortOrder,
+    Value<bool>? showOnHome,
     Value<bool>? isSystem,
     Value<bool>? isActive,
     Value<int>? createdAt,
@@ -1227,7 +1369,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
       name: name ?? this.name,
       flowType: flowType ?? this.flowType,
       iconKey: iconKey ?? this.iconKey,
+      colorKey: colorKey ?? this.colorKey,
       sortOrder: sortOrder ?? this.sortOrder,
+      showOnHome: showOnHome ?? this.showOnHome,
       isSystem: isSystem ?? this.isSystem,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
@@ -1255,8 +1399,14 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
     if (iconKey.present) {
       map['icon_key'] = Variable<String>(iconKey.value);
     }
+    if (colorKey.present) {
+      map['color_key'] = Variable<String>(colorKey.value);
+    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (showOnHome.present) {
+      map['show_on_home'] = Variable<bool>(showOnHome.value);
     }
     if (isSystem.present) {
       map['is_system'] = Variable<bool>(isSystem.value);
@@ -1287,7 +1437,9 @@ class CategoryRecordsCompanion extends UpdateCompanion<CategoryRecord> {
           ..write('name: $name, ')
           ..write('flowType: $flowType, ')
           ..write('iconKey: $iconKey, ')
+          ..write('colorKey: $colorKey, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('showOnHome: $showOnHome, ')
           ..write('isSystem: $isSystem, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
@@ -1339,7 +1491,7 @@ class $TransactionRecordsTable extends TransactionRecords
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints:
-        'NOT NULL CHECK (entry_kind IN (\'allocation\', \'refund\'))',
+        'NOT NULL CHECK (entry_kind IN (\'allocation\', \'refund\', \'withdrawal\'))',
   );
   static const VerificationMeta _flowTypeMeta = const VerificationMeta(
     'flowType',
@@ -2226,6 +2378,73 @@ class $AppSettingRecordsTable extends AppSettingRecords
         'NOT NULL DEFAULT \'system\' CHECK (theme_mode IN (\'system\', \'light\', \'dark\'))',
     defaultValue: const CustomExpression('\'system\''),
   );
+  static const VerificationMeta _hideAmountsMeta = const VerificationMeta(
+    'hideAmounts',
+  );
+  @override
+  late final GeneratedColumn<bool> hideAmounts = GeneratedColumn<bool>(
+    'hide_amounts',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("hide_amounts" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _appLockEnabledMeta = const VerificationMeta(
+    'appLockEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> appLockEnabled = GeneratedColumn<bool>(
+    'app_lock_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("app_lock_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _autoLockMinutesMeta = const VerificationMeta(
+    'autoLockMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> autoLockMinutes = GeneratedColumn<int>(
+    'auto_lock_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 5 CHECK (auto_lock_minutes >= 0)',
+    defaultValue: const CustomExpression('5'),
+  );
+  static const VerificationMeta _lastBackupAtMeta = const VerificationMeta(
+    'lastBackupAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastBackupAt = GeneratedColumn<int>(
+    'last_backup_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _backupReminderDaysMeta =
+      const VerificationMeta('backupReminderDays');
+  @override
+  late final GeneratedColumn<int> backupReminderDays = GeneratedColumn<int>(
+    'backup_reminder_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 7 CHECK (backup_reminder_days BETWEEN 1 AND 365)',
+    defaultValue: const CustomExpression('7'),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2244,6 +2463,11 @@ class $AppSettingRecordsTable extends AppSettingRecords
     currencyCode,
     onboardingCompleted,
     themeMode,
+    hideAmounts,
+    appLockEnabled,
+    autoLockMinutes,
+    lastBackupAt,
+    backupReminderDays,
     updatedAt,
   ];
   @override
@@ -2301,6 +2525,51 @@ class $AppSettingRecordsTable extends AppSettingRecords
         themeMode.isAcceptableOrUnknown(data['theme_mode']!, _themeModeMeta),
       );
     }
+    if (data.containsKey('hide_amounts')) {
+      context.handle(
+        _hideAmountsMeta,
+        hideAmounts.isAcceptableOrUnknown(
+          data['hide_amounts']!,
+          _hideAmountsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('app_lock_enabled')) {
+      context.handle(
+        _appLockEnabledMeta,
+        appLockEnabled.isAcceptableOrUnknown(
+          data['app_lock_enabled']!,
+          _appLockEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_lock_minutes')) {
+      context.handle(
+        _autoLockMinutesMeta,
+        autoLockMinutes.isAcceptableOrUnknown(
+          data['auto_lock_minutes']!,
+          _autoLockMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_backup_at')) {
+      context.handle(
+        _lastBackupAtMeta,
+        lastBackupAt.isAcceptableOrUnknown(
+          data['last_backup_at']!,
+          _lastBackupAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('backup_reminder_days')) {
+      context.handle(
+        _backupReminderDaysMeta,
+        backupReminderDays.isAcceptableOrUnknown(
+          data['backup_reminder_days']!,
+          _backupReminderDaysMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2338,6 +2607,26 @@ class $AppSettingRecordsTable extends AppSettingRecords
         DriftSqlType.string,
         data['${effectivePrefix}theme_mode'],
       )!,
+      hideAmounts: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}hide_amounts'],
+      )!,
+      appLockEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}app_lock_enabled'],
+      )!,
+      autoLockMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}auto_lock_minutes'],
+      )!,
+      lastBackupAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_backup_at'],
+      ),
+      backupReminderDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}backup_reminder_days'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
@@ -2358,6 +2647,11 @@ class AppSettingRecord extends DataClass
   final String currencyCode;
   final bool onboardingCompleted;
   final String themeMode;
+  final bool hideAmounts;
+  final bool appLockEnabled;
+  final int autoLockMinutes;
+  final int? lastBackupAt;
+  final int backupReminderDays;
   final int updatedAt;
   const AppSettingRecord({
     required this.singletonId,
@@ -2365,6 +2659,11 @@ class AppSettingRecord extends DataClass
     required this.currencyCode,
     required this.onboardingCompleted,
     required this.themeMode,
+    required this.hideAmounts,
+    required this.appLockEnabled,
+    required this.autoLockMinutes,
+    this.lastBackupAt,
+    required this.backupReminderDays,
     required this.updatedAt,
   });
   @override
@@ -2375,6 +2674,13 @@ class AppSettingRecord extends DataClass
     map['currency_code'] = Variable<String>(currencyCode);
     map['onboarding_completed'] = Variable<bool>(onboardingCompleted);
     map['theme_mode'] = Variable<String>(themeMode);
+    map['hide_amounts'] = Variable<bool>(hideAmounts);
+    map['app_lock_enabled'] = Variable<bool>(appLockEnabled);
+    map['auto_lock_minutes'] = Variable<int>(autoLockMinutes);
+    if (!nullToAbsent || lastBackupAt != null) {
+      map['last_backup_at'] = Variable<int>(lastBackupAt);
+    }
+    map['backup_reminder_days'] = Variable<int>(backupReminderDays);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
   }
@@ -2386,6 +2692,13 @@ class AppSettingRecord extends DataClass
       currencyCode: Value(currencyCode),
       onboardingCompleted: Value(onboardingCompleted),
       themeMode: Value(themeMode),
+      hideAmounts: Value(hideAmounts),
+      appLockEnabled: Value(appLockEnabled),
+      autoLockMinutes: Value(autoLockMinutes),
+      lastBackupAt: lastBackupAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastBackupAt),
+      backupReminderDays: Value(backupReminderDays),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2403,6 +2716,11 @@ class AppSettingRecord extends DataClass
         json['onboardingCompleted'],
       ),
       themeMode: serializer.fromJson<String>(json['themeMode']),
+      hideAmounts: serializer.fromJson<bool>(json['hideAmounts']),
+      appLockEnabled: serializer.fromJson<bool>(json['appLockEnabled']),
+      autoLockMinutes: serializer.fromJson<int>(json['autoLockMinutes']),
+      lastBackupAt: serializer.fromJson<int?>(json['lastBackupAt']),
+      backupReminderDays: serializer.fromJson<int>(json['backupReminderDays']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
   }
@@ -2415,6 +2733,11 @@ class AppSettingRecord extends DataClass
       'currencyCode': serializer.toJson<String>(currencyCode),
       'onboardingCompleted': serializer.toJson<bool>(onboardingCompleted),
       'themeMode': serializer.toJson<String>(themeMode),
+      'hideAmounts': serializer.toJson<bool>(hideAmounts),
+      'appLockEnabled': serializer.toJson<bool>(appLockEnabled),
+      'autoLockMinutes': serializer.toJson<int>(autoLockMinutes),
+      'lastBackupAt': serializer.toJson<int?>(lastBackupAt),
+      'backupReminderDays': serializer.toJson<int>(backupReminderDays),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
   }
@@ -2425,6 +2748,11 @@ class AppSettingRecord extends DataClass
     String? currencyCode,
     bool? onboardingCompleted,
     String? themeMode,
+    bool? hideAmounts,
+    bool? appLockEnabled,
+    int? autoLockMinutes,
+    Value<int?> lastBackupAt = const Value.absent(),
+    int? backupReminderDays,
     int? updatedAt,
   }) => AppSettingRecord(
     singletonId: singletonId ?? this.singletonId,
@@ -2432,6 +2760,11 @@ class AppSettingRecord extends DataClass
     currencyCode: currencyCode ?? this.currencyCode,
     onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     themeMode: themeMode ?? this.themeMode,
+    hideAmounts: hideAmounts ?? this.hideAmounts,
+    appLockEnabled: appLockEnabled ?? this.appLockEnabled,
+    autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+    lastBackupAt: lastBackupAt.present ? lastBackupAt.value : this.lastBackupAt,
+    backupReminderDays: backupReminderDays ?? this.backupReminderDays,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   AppSettingRecord copyWithCompanion(AppSettingRecordsCompanion data) {
@@ -2447,6 +2780,21 @@ class AppSettingRecord extends DataClass
           ? data.onboardingCompleted.value
           : this.onboardingCompleted,
       themeMode: data.themeMode.present ? data.themeMode.value : this.themeMode,
+      hideAmounts: data.hideAmounts.present
+          ? data.hideAmounts.value
+          : this.hideAmounts,
+      appLockEnabled: data.appLockEnabled.present
+          ? data.appLockEnabled.value
+          : this.appLockEnabled,
+      autoLockMinutes: data.autoLockMinutes.present
+          ? data.autoLockMinutes.value
+          : this.autoLockMinutes,
+      lastBackupAt: data.lastBackupAt.present
+          ? data.lastBackupAt.value
+          : this.lastBackupAt,
+      backupReminderDays: data.backupReminderDays.present
+          ? data.backupReminderDays.value
+          : this.backupReminderDays,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -2459,6 +2807,11 @@ class AppSettingRecord extends DataClass
           ..write('currencyCode: $currencyCode, ')
           ..write('onboardingCompleted: $onboardingCompleted, ')
           ..write('themeMode: $themeMode, ')
+          ..write('hideAmounts: $hideAmounts, ')
+          ..write('appLockEnabled: $appLockEnabled, ')
+          ..write('autoLockMinutes: $autoLockMinutes, ')
+          ..write('lastBackupAt: $lastBackupAt, ')
+          ..write('backupReminderDays: $backupReminderDays, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -2471,6 +2824,11 @@ class AppSettingRecord extends DataClass
     currencyCode,
     onboardingCompleted,
     themeMode,
+    hideAmounts,
+    appLockEnabled,
+    autoLockMinutes,
+    lastBackupAt,
+    backupReminderDays,
     updatedAt,
   );
   @override
@@ -2482,6 +2840,11 @@ class AppSettingRecord extends DataClass
           other.currencyCode == this.currencyCode &&
           other.onboardingCompleted == this.onboardingCompleted &&
           other.themeMode == this.themeMode &&
+          other.hideAmounts == this.hideAmounts &&
+          other.appLockEnabled == this.appLockEnabled &&
+          other.autoLockMinutes == this.autoLockMinutes &&
+          other.lastBackupAt == this.lastBackupAt &&
+          other.backupReminderDays == this.backupReminderDays &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -2491,6 +2854,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
   final Value<String> currencyCode;
   final Value<bool> onboardingCompleted;
   final Value<String> themeMode;
+  final Value<bool> hideAmounts;
+  final Value<bool> appLockEnabled;
+  final Value<int> autoLockMinutes;
+  final Value<int?> lastBackupAt;
+  final Value<int> backupReminderDays;
   final Value<int> updatedAt;
   const AppSettingRecordsCompanion({
     this.singletonId = const Value.absent(),
@@ -2498,6 +2866,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     this.currencyCode = const Value.absent(),
     this.onboardingCompleted = const Value.absent(),
     this.themeMode = const Value.absent(),
+    this.hideAmounts = const Value.absent(),
+    this.appLockEnabled = const Value.absent(),
+    this.autoLockMinutes = const Value.absent(),
+    this.lastBackupAt = const Value.absent(),
+    this.backupReminderDays = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
   AppSettingRecordsCompanion.insert({
@@ -2506,6 +2879,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     this.currencyCode = const Value.absent(),
     required bool onboardingCompleted,
     this.themeMode = const Value.absent(),
+    this.hideAmounts = const Value.absent(),
+    this.appLockEnabled = const Value.absent(),
+    this.autoLockMinutes = const Value.absent(),
+    this.lastBackupAt = const Value.absent(),
+    this.backupReminderDays = const Value.absent(),
     required int updatedAt,
   }) : salaryDay = Value(salaryDay),
        onboardingCompleted = Value(onboardingCompleted),
@@ -2516,6 +2894,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     Expression<String>? currencyCode,
     Expression<bool>? onboardingCompleted,
     Expression<String>? themeMode,
+    Expression<bool>? hideAmounts,
+    Expression<bool>? appLockEnabled,
+    Expression<int>? autoLockMinutes,
+    Expression<int>? lastBackupAt,
+    Expression<int>? backupReminderDays,
     Expression<int>? updatedAt,
   }) {
     return RawValuesInsertable({
@@ -2525,6 +2908,12 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
       if (onboardingCompleted != null)
         'onboarding_completed': onboardingCompleted,
       if (themeMode != null) 'theme_mode': themeMode,
+      if (hideAmounts != null) 'hide_amounts': hideAmounts,
+      if (appLockEnabled != null) 'app_lock_enabled': appLockEnabled,
+      if (autoLockMinutes != null) 'auto_lock_minutes': autoLockMinutes,
+      if (lastBackupAt != null) 'last_backup_at': lastBackupAt,
+      if (backupReminderDays != null)
+        'backup_reminder_days': backupReminderDays,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
@@ -2535,6 +2924,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     Value<String>? currencyCode,
     Value<bool>? onboardingCompleted,
     Value<String>? themeMode,
+    Value<bool>? hideAmounts,
+    Value<bool>? appLockEnabled,
+    Value<int>? autoLockMinutes,
+    Value<int?>? lastBackupAt,
+    Value<int>? backupReminderDays,
     Value<int>? updatedAt,
   }) {
     return AppSettingRecordsCompanion(
@@ -2543,6 +2937,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
       currencyCode: currencyCode ?? this.currencyCode,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       themeMode: themeMode ?? this.themeMode,
+      hideAmounts: hideAmounts ?? this.hideAmounts,
+      appLockEnabled: appLockEnabled ?? this.appLockEnabled,
+      autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+      lastBackupAt: lastBackupAt ?? this.lastBackupAt,
+      backupReminderDays: backupReminderDays ?? this.backupReminderDays,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -2565,6 +2964,21 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     if (themeMode.present) {
       map['theme_mode'] = Variable<String>(themeMode.value);
     }
+    if (hideAmounts.present) {
+      map['hide_amounts'] = Variable<bool>(hideAmounts.value);
+    }
+    if (appLockEnabled.present) {
+      map['app_lock_enabled'] = Variable<bool>(appLockEnabled.value);
+    }
+    if (autoLockMinutes.present) {
+      map['auto_lock_minutes'] = Variable<int>(autoLockMinutes.value);
+    }
+    if (lastBackupAt.present) {
+      map['last_backup_at'] = Variable<int>(lastBackupAt.value);
+    }
+    if (backupReminderDays.present) {
+      map['backup_reminder_days'] = Variable<int>(backupReminderDays.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(updatedAt.value);
     }
@@ -2579,7 +2993,449 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
           ..write('currencyCode: $currencyCode, ')
           ..write('onboardingCompleted: $onboardingCompleted, ')
           ..write('themeMode: $themeMode, ')
+          ..write('hideAmounts: $hideAmounts, ')
+          ..write('appLockEnabled: $appLockEnabled, ')
+          ..write('autoLockMinutes: $autoLockMinutes, ')
+          ..write('lastBackupAt: $lastBackupAt, ')
+          ..write('backupReminderDays: $backupReminderDays, ')
           ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BudgetRecordsTable extends BudgetRecords
+    with TableInfo<$BudgetRecordsTable, BudgetRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BudgetRecordsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _salaryCycleIdMeta = const VerificationMeta(
+    'salaryCycleId',
+  );
+  @override
+  late final GeneratedColumn<String> salaryCycleId = GeneratedColumn<String>(
+    'salary_cycle_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES salary_cycles (id)',
+    ),
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES categories (id)',
+    ),
+  );
+  static const VerificationMeta _limitCentsMeta = const VerificationMeta(
+    'limitCents',
+  );
+  @override
+  late final GeneratedColumn<int> limitCents = GeneratedColumn<int>(
+    'limit_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (limit_cents > 0)',
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    salaryCycleId,
+    categoryId,
+    limitCents,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'budgets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BudgetRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('salary_cycle_id')) {
+      context.handle(
+        _salaryCycleIdMeta,
+        salaryCycleId.isAcceptableOrUnknown(
+          data['salary_cycle_id']!,
+          _salaryCycleIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_salaryCycleIdMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
+    if (data.containsKey('limit_cents')) {
+      context.handle(
+        _limitCentsMeta,
+        limitCents.isAcceptableOrUnknown(data['limit_cents']!, _limitCentsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_limitCentsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {salaryCycleId, categoryId},
+  ];
+  @override
+  BudgetRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BudgetRecord(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      salaryCycleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}salary_cycle_id'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      ),
+      limitCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}limit_cents'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BudgetRecordsTable createAlias(String alias) {
+    return $BudgetRecordsTable(attachedDatabase, alias);
+  }
+}
+
+class BudgetRecord extends DataClass implements Insertable<BudgetRecord> {
+  final String id;
+  final String salaryCycleId;
+  final String? categoryId;
+  final int limitCents;
+  final int createdAt;
+  final int updatedAt;
+  const BudgetRecord({
+    required this.id,
+    required this.salaryCycleId,
+    this.categoryId,
+    required this.limitCents,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['salary_cycle_id'] = Variable<String>(salaryCycleId);
+    if (!nullToAbsent || categoryId != null) {
+      map['category_id'] = Variable<String>(categoryId);
+    }
+    map['limit_cents'] = Variable<int>(limitCents);
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  BudgetRecordsCompanion toCompanion(bool nullToAbsent) {
+    return BudgetRecordsCompanion(
+      id: Value(id),
+      salaryCycleId: Value(salaryCycleId),
+      categoryId: categoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoryId),
+      limitCents: Value(limitCents),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory BudgetRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BudgetRecord(
+      id: serializer.fromJson<String>(json['id']),
+      salaryCycleId: serializer.fromJson<String>(json['salaryCycleId']),
+      categoryId: serializer.fromJson<String?>(json['categoryId']),
+      limitCents: serializer.fromJson<int>(json['limitCents']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'salaryCycleId': serializer.toJson<String>(salaryCycleId),
+      'categoryId': serializer.toJson<String?>(categoryId),
+      'limitCents': serializer.toJson<int>(limitCents),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  BudgetRecord copyWith({
+    String? id,
+    String? salaryCycleId,
+    Value<String?> categoryId = const Value.absent(),
+    int? limitCents,
+    int? createdAt,
+    int? updatedAt,
+  }) => BudgetRecord(
+    id: id ?? this.id,
+    salaryCycleId: salaryCycleId ?? this.salaryCycleId,
+    categoryId: categoryId.present ? categoryId.value : this.categoryId,
+    limitCents: limitCents ?? this.limitCents,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  BudgetRecord copyWithCompanion(BudgetRecordsCompanion data) {
+    return BudgetRecord(
+      id: data.id.present ? data.id.value : this.id,
+      salaryCycleId: data.salaryCycleId.present
+          ? data.salaryCycleId.value
+          : this.salaryCycleId,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      limitCents: data.limitCents.present
+          ? data.limitCents.value
+          : this.limitCents,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BudgetRecord(')
+          ..write('id: $id, ')
+          ..write('salaryCycleId: $salaryCycleId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('limitCents: $limitCents, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    salaryCycleId,
+    categoryId,
+    limitCents,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BudgetRecord &&
+          other.id == this.id &&
+          other.salaryCycleId == this.salaryCycleId &&
+          other.categoryId == this.categoryId &&
+          other.limitCents == this.limitCents &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class BudgetRecordsCompanion extends UpdateCompanion<BudgetRecord> {
+  final Value<String> id;
+  final Value<String> salaryCycleId;
+  final Value<String?> categoryId;
+  final Value<int> limitCents;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const BudgetRecordsCompanion({
+    this.id = const Value.absent(),
+    this.salaryCycleId = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.limitCents = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BudgetRecordsCompanion.insert({
+    required String id,
+    required String salaryCycleId,
+    this.categoryId = const Value.absent(),
+    required int limitCents,
+    required int createdAt,
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       salaryCycleId = Value(salaryCycleId),
+       limitCents = Value(limitCents),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<BudgetRecord> custom({
+    Expression<String>? id,
+    Expression<String>? salaryCycleId,
+    Expression<String>? categoryId,
+    Expression<int>? limitCents,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (salaryCycleId != null) 'salary_cycle_id': salaryCycleId,
+      if (categoryId != null) 'category_id': categoryId,
+      if (limitCents != null) 'limit_cents': limitCents,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BudgetRecordsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? salaryCycleId,
+    Value<String?>? categoryId,
+    Value<int>? limitCents,
+    Value<int>? createdAt,
+    Value<int>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return BudgetRecordsCompanion(
+      id: id ?? this.id,
+      salaryCycleId: salaryCycleId ?? this.salaryCycleId,
+      categoryId: categoryId ?? this.categoryId,
+      limitCents: limitCents ?? this.limitCents,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (salaryCycleId.present) {
+      map['salary_cycle_id'] = Variable<String>(salaryCycleId.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (limitCents.present) {
+      map['limit_cents'] = Variable<int>(limitCents.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BudgetRecordsCompanion(')
+          ..write('id: $id, ')
+          ..write('salaryCycleId: $salaryCycleId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('limitCents: $limitCents, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -2596,6 +3452,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $TransactionRecordsTable(this);
   late final $AppSettingRecordsTable appSettingRecords =
       $AppSettingRecordsTable(this);
+  late final $BudgetRecordsTable budgetRecords = $BudgetRecordsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2605,5 +3462,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     categoryRecords,
     transactionRecords,
     appSettingRecords,
+    budgetRecords,
   ];
 }

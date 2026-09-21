@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:xinflow/app/theme/app_theme.dart';
 import 'package:xinflow/core/money/money.dart';
 
 typedef OnboardingSubmit =
@@ -168,12 +167,12 @@ final class _BrandMark extends StatelessWidget {
         width: 52,
         height: 52,
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: Theme.of(context).colorScheme.primary,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.account_balance_wallet_rounded,
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.onPrimary,
           size: 30,
         ),
       ),

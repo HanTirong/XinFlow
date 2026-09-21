@@ -25,6 +25,7 @@ final class _CycleSettlementSheetState
   final _formKey = GlobalKey<FormState>();
   final _salaryController = TextEditingController();
   bool _isSaving = false;
+  bool _carryPositiveRemaining = false;
   String? _errorMessage;
 
   @override
@@ -45,6 +46,7 @@ final class _CycleSettlementSheetState
           .execute(
             newSalaryCents: Money.parse(_salaryController.text).cents,
             salaryDay: widget.salaryDay,
+            carryPositiveRemaining: _carryPositiveRemaining,
           );
       if (mounted) Navigator.of(context).pop(true);
     } on Object catch (error) {
@@ -144,6 +146,19 @@ final class _CycleSettlementSheetState
                   },
                 ),
                 const SizedBox(height: 12),
+                if (summary.remainingCents > 0)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('将上期正余额结转到新周期'),
+                    subtitle: Text(
+                      '结转 ${Money.fromCents(summary.remainingCents).format()}，默认不结转。',
+                    ),
+                    value: _carryPositiveRemaining,
+                    onChanged: _isSaving
+                        ? null
+                        : (value) =>
+                              setState(() => _carryPositiveRemaining = value),
+                  ),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -151,8 +166,9 @@ final class _CycleSettlementSheetState
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
-                    '上期剩余不会自动计入新周期。旧周期会封存，'
-                    '新周期只以本次到账工资作为初始金额。',
+                    _carryPositiveRemaining
+                        ? '上期正余额将作为独立结转金额计入新周期，不会改写新到账工资。'
+                        : '上期剩余不会自动计入新周期。旧周期会封存，新周期只以本次到账工资作为初始金额。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSecondaryContainer,
                     ),

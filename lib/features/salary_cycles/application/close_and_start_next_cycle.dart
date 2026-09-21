@@ -30,6 +30,7 @@ final class CloseAndStartNextCycle {
   Future<CycleTransition> execute({
     required int newSalaryCents,
     required int salaryDay,
+    bool carryPositiveRemaining = false,
   }) async {
     final activeCycle = await salaryCycles.getActiveCycle();
     if (activeCycle == null) {
@@ -39,6 +40,7 @@ final class CloseAndStartNextCycle {
     final entries = await transactions.listCycleTransactions(activeCycle.id);
     final summary = SalarySummary.fromTransactions(
       salaryCents: activeCycle.salaryCents,
+      carryoverCents: activeCycle.carryoverCents,
       transactions: entries,
     );
     final confirmedAt = clock.now();
@@ -65,6 +67,7 @@ final class CloseAndStartNextCycle {
         confirmedDate: nextCycleStart,
         salaryDay: salaryDay,
       ),
+      carryPositiveRemaining: carryPositiveRemaining,
     );
 
     await salaryCycles.replaceActiveCycle(

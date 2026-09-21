@@ -70,7 +70,9 @@ final class DriftCategoryRepository implements CategoryRepository {
             name: category.name.trim(),
             flowType: category.flowType.name,
             iconKey: category.iconKey,
+            colorKey: Value(category.colorKey),
             sortOrder: category.sortOrder,
+            showOnHome: Value(category.showOnHome),
             isSystem: category.isSystem,
             isActive: Value(category.isActive),
             createdAt: now,
@@ -98,4 +100,51 @@ final class DriftCategoryRepository implements CategoryRepository {
         );
     if (affected != 1) throw StateError('分类不存在或已经删除。');
   }
+
+  @override
+  Future<void> update(Category category) async {
+    if (category.name.trim().isEmpty) throw ArgumentError('分类名称不能为空。');
+    if (category.parentId != null) {
+      final parent = await getById(category.parentId!);
+      if (parent == null ||
+          !parent.isTopLevel ||
+          parent.flowType != category.flowType ||
+          parent.id == category.id) {
+        throw ArgumentError('二级分类必须关联相同性质的有效一级分类。');
+      }
+    }
+    final affected =
+        await (_database.update(_database.categoryRecords)..where(
+              (row) => row.id.equals(category.id) & row.deletedAt.isNull(),
+            ))
+            .write(
+              CategoryRecordsCompanion(
+                parentId: Value(category.parentId),
+                name: Value(category.name.trim()),
+                iconKey: Value(category.iconKey),
+                colorKey: Value(category.colorKey),
+                sortOrder: Value(category.sortOrder),
+                showOnHome: Value(category.showOnHome),
+                isActive: Value(category.isActive),
+                updatedAt: Value(DateTime.now().toUtc().millisecondsSinceEpoch),
+              ),
+            );
+    if (affected != 1) throw StateError('分类不存在或已经删除。');
+  }
+
+  @override
+  Future<void> reorder(List<Category> categories) =>
+      _database.transaction(() async {
+        final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+        for (var index = 0; index < categories.length; index++) {
+          await (_database.update(
+            _database.categoryRecords,
+          )..where((row) => row.id.equals(categories[index].id))).write(
+            CategoryRecordsCompanion(
+              sortOrder: Value((index + 1) * 10),
+              updatedAt: Value(now),
+            ),
+          );
+        }
+      });
 }

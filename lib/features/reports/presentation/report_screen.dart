@@ -1,10 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
+import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/categories/presentation/category_visual_config.dart';
 import 'package:xinflow/features/reports/domain/cycle_report.dart';
+import 'package:xinflow/features/reports/domain/cross_cycle_report.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/salary_cycles/presentation/cycle_picker_sheet.dart';
 
@@ -37,6 +41,7 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
             orElse: () => cycles.first,
           );
           final report = ref.watch(cycleReportProvider(selected.id));
+          final crossCycle = ref.watch(crossCycleReportProvider).value;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -61,8 +66,11 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
                       const Center(child: CircularProgressIndicator()),
                   error: (error, stackTrace) =>
                       Center(child: Text('报告生成失败：$error')),
-                  data: (value) =>
-                      _ReportBody(report: value, categories: categories),
+                  data: (value) => _ReportBody(
+                    report: value,
+                    categories: categories,
+                    crossCycle: crossCycle,
+                  ),
                 ),
               ),
             ],
@@ -88,10 +96,15 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
 }
 
 final class _ReportBody extends StatelessWidget {
-  const _ReportBody({required this.report, required this.categories});
+  const _ReportBody({
+    required this.report,
+    required this.categories,
+    required this.crossCycle,
+  });
 
   final CycleReport report;
   final List<Category> categories;
+  final CrossCycleReport? crossCycle;
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +163,8 @@ final class _ReportBody extends StatelessWidget {
               ? const Text('当前周期还没有每日消费数据。')
               : Column(
                   children: [
+                    _DailyTrendChart(entries: dailyEntries),
+                    const SizedBox(height: 8),
                     for (final entry in dailyEntries)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -168,7 +183,17 @@ final class _ReportBody extends StatelessWidget {
           child: report.previousSummary == null
               ? const Text('没有更早的工资周期可供比较。')
               : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Text(
+                      '本期 ${_cycleRange(report.cycle)}\n'
+                      '上期 ${_cycleRange(report.previousCycle!)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     _ComparisonRow(
                       label: '工资',
                       current: summary.salaryCents,
@@ -178,18 +203,252 @@ final class _ReportBody extends StatelessWidget {
                       label: '净消费',
                       current: summary.netExpenseCents,
                       previous: report.previousSummary!.netExpenseCents,
+                      currentSalary: summary.salaryCents,
+                      previousSalary: report.previousSummary!.salaryCents,
+                    ),
+                    _ComparisonRow(
+                      label: '存款',
+                      current: summary.savingCents,
+                      previous: report.previousSummary!.savingCents,
+                      currentSalary: summary.salaryCents,
+                      previousSalary: report.previousSummary!.salaryCents,
+                    ),
+                    _ComparisonRow(
+                      label: '理财',
+                      current: summary.investmentCents,
+                      previous: report.previousSummary!.investmentCents,
+                      currentSalary: summary.salaryCents,
+                      previousSalary: report.previousSummary!.salaryCents,
                     ),
                     _ComparisonRow(
                       label: '最终剩余',
                       current: summary.remainingCents,
                       previous: report.previousSummary!.remainingCents,
+                      currentSalary: summary.salaryCents,
+                      previousSalary: report.previousSummary!.salaryCents,
                     ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+        _Section(
+          title: '跨周期趋势与平均值',
+          child: crossCycle == null
+              ? const LinearProgressIndicator()
+              : crossCycle!.points.length < 2
+              ? const Text('至少需要两个工资周期才能形成长期趋势。')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _AverageChip(
+                          label: '平均工资',
+                          cents: crossCycle!.averageSalaryCents,
+                        ),
+                        _AverageChip(
+                          label: '平均消费',
+                          cents: crossCycle!.averageExpenseCents,
+                        ),
+                        _AverageChip(
+                          label: '平均存款',
+                          cents: crossCycle!.averageSavingCents,
+                        ),
+                        _AverageChip(
+                          label: '平均理财',
+                          cents: crossCycle!.averageInvestmentCents,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    for (final point in crossCycle!.points.reversed.take(6))
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(_cycleRange(point.cycle)),
+                        subtitle: Text(
+                          '消费 ${Money.fromCents(point.summary.netExpenseCents).format()} · '
+                          '存款 ${Money.fromCents(point.summary.savingCents).format()} · '
+                          '理财 ${Money.fromCents(point.summary.investmentCents).format()}',
+                        ),
+                        trailing: Text(
+                          Money.fromCents(point.summary.salaryCents).format(),
+                        ),
+                      ),
+                    if (crossCycle!.categoryTrends.isNotEmpty) ...[
+                      const Divider(),
+                      Text(
+                        '长期消费分类变化',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      for (final trend in crossCycle!.categoryTrends.take(5))
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            categoryById[trend.categoryId]?.name ?? '其他',
+                          ),
+                          subtitle: Text(
+                            '累计 ${Money.fromCents(trend.totalCents).format()}',
+                          ),
+                          trailing: Text(
+                            '${trend.changeCents >= 0 ? '+' : '-'}'
+                            '${Money.fromCents(trend.changeCents.abs()).format()}',
+                            style: TextStyle(
+                              color: trend.changeCents > 0
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
         ),
       ],
     );
   }
+}
+
+final class _AverageChip extends StatelessWidget {
+  const _AverageChip({required this.label, required this.cents});
+
+  final String label;
+  final int cents;
+
+  @override
+  Widget build(BuildContext context) =>
+      Chip(label: Text('$label ${Money.fromCents(cents).format()}'));
+}
+
+final class _DailyTrendChart extends StatelessWidget {
+  const _DailyTrendChart({required this.entries});
+
+  final List<MapEntry<LocalDate, int>> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = entries.first.key;
+    final last = entries.last.key;
+    return Semantics(
+      label:
+          '每日净消费趋势，共 ${entries.length} 天，'
+          '从 ${first.month}月${first.day}日到 ${last.month}月${last.day}日',
+      image: true,
+      child: SizedBox(
+        height: 150,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _DailyTrendPainter(
+            entries: entries,
+            lineColor: Theme.of(context).colorScheme.primary,
+            gridColor: Theme.of(context).colorScheme.outlineVariant,
+            labelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _DailyTrendPainter extends CustomPainter {
+  const _DailyTrendPainter({
+    required this.entries,
+    required this.lineColor,
+    required this.gridColor,
+    required this.labelColor,
+  });
+
+  final List<MapEntry<LocalDate, int>> entries;
+  final Color lineColor;
+  final Color gridColor;
+  final Color labelColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const top = 12.0;
+    const bottom = 28.0;
+    const horizontal = 8.0;
+    final chartHeight = size.height - top - bottom;
+    final values = entries.map((entry) => entry.value.toDouble()).toList();
+    final minimum = math.min(0.0, values.reduce(math.min));
+    final maximum = math.max(0.0, values.reduce(math.max));
+    final span = math.max(1.0, maximum - minimum);
+    double yFor(double value) => top + (maximum - value) / span * chartHeight;
+    final zeroY = yFor(0);
+
+    canvas.drawLine(
+      Offset(horizontal, zeroY),
+      Offset(size.width - horizontal, zeroY),
+      Paint()
+        ..color = gridColor
+        ..strokeWidth = 1,
+    );
+
+    final path = Path();
+    final points = <Offset>[];
+    for (var index = 0; index < values.length; index++) {
+      final x = values.length == 1
+          ? size.width / 2
+          : horizontal +
+                index * (size.width - horizontal * 2) / (values.length - 1);
+      final point = Offset(x, yFor(values[index]));
+      points.add(point);
+      if (index == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = lineColor
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+    final pointPaint = Paint()..color = lineColor;
+    for (final point in points) {
+      canvas.drawCircle(point, 4, pointPaint);
+    }
+
+    _paintLabel(
+      canvas,
+      '${entries.first.key.month}/${entries.first.key.day}',
+      Offset(horizontal, size.height - 20),
+      TextAlign.left,
+    );
+    if (entries.length > 1) {
+      _paintLabel(
+        canvas,
+        '${entries.last.key.month}/${entries.last.key.day}',
+        Offset(size.width - horizontal, size.height - 20),
+        TextAlign.right,
+      );
+    }
+  }
+
+  void _paintLabel(Canvas canvas, String text, Offset anchor, TextAlign align) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: labelColor, fontSize: 11),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: align,
+    )..layout();
+    final dx = align == TextAlign.right ? anchor.dx - painter.width : anchor.dx;
+    painter.paint(canvas, Offset(dx, anchor.dy));
+  }
+
+  @override
+  bool shouldRepaint(covariant _DailyTrendPainter oldDelegate) =>
+      oldDelegate.entries != entries ||
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.gridColor != gridColor ||
+      oldDelegate.labelColor != labelColor;
 }
 
 final class _MetricCard extends StatelessWidget {
@@ -281,8 +540,10 @@ final class _CategoryBar extends StatelessWidget {
           const SizedBox(height: 6),
           LinearProgressIndicator(
             value: ratio,
-            color: config.resolvedIconColor(context),
-            backgroundColor: config.resolvedBackgroundColor(context),
+            color: Theme.of(context).colorScheme.primary,
+            backgroundColor: Theme.of(
+              context,
+            ).progressIndicatorTheme.linearTrackColor,
           ),
         ],
       ),
@@ -295,24 +556,53 @@ final class _ComparisonRow extends StatelessWidget {
     required this.label,
     required this.current,
     required this.previous,
+    this.currentSalary,
+    this.previousSalary,
   });
 
   final String label;
   final int current;
   final int previous;
+  final int? currentSalary;
+  final int? previousSalary;
 
   @override
   Widget build(BuildContext context) {
     final difference = current - previous;
     final sign = difference > 0 ? '+' : '';
+    final ratioDifference = currentSalary == null || previousSalary == null
+        ? null
+        : _ratio(current, currentSalary!) - _ratio(previous, previousSalary!);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(label),
       subtitle: Text('上期 ${Money.fromCents(previous).format()}'),
-      trailing: Text(
-        '$sign${Money.fromCents(difference).format()}',
-        style: Theme.of(context).textTheme.titleMedium,
+      trailing: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '$sign${Money.fromCents(difference).format()}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (ratioDifference != null)
+            Text(
+              '${ratioDifference >= 0 ? '+' : ''}'
+              '${(ratioDifference * 100).toStringAsFixed(1)}%',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
       ),
     );
   }
+}
+
+double _ratio(int cents, int salaryCents) =>
+    salaryCents == 0 ? 0 : cents / salaryCents;
+
+String _cycleRange(SalaryCycle cycle) {
+  final start = LocalDate.fromDateTime(cycle.startedAt);
+  return '$start ～ ${cycle.expectedPayDate}';
 }

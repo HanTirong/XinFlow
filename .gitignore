@@ -37,3 +37,6 @@ Thumbs.db
 
 # Local feedback documents
 feedback/
+
+# Local Codex attachments
+.codex-remote-attachments/

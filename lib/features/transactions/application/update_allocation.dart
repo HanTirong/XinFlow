@@ -4,6 +4,7 @@ import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart
 import 'package:xinflow/features/transactions/data/transaction_repository.dart';
 import 'package:xinflow/features/transactions/domain/refund_policy.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+import 'package:xinflow/features/transactions/domain/withdrawal_policy.dart';
 
 final class UpdateAllocation {
   const UpdateAllocation({
@@ -37,7 +38,7 @@ final class UpdateAllocation {
       throw StateError('要修改的流水不存在或已经删除。');
     }
     if (current.entryKind != EntryKind.allocation) {
-      throw StateError('退款记录不能通过普通流水入口修改。');
+      throw StateError('冲减记录不能通过普通流水入口修改。');
     }
     final activeCycle = await salaryCycles.getActiveCycle();
     if (activeCycle == null || activeCycle.id != current.salaryCycleId) {
@@ -74,12 +75,33 @@ final class UpdateAllocation {
       note: trimmedNote == null || trimmedNote.isEmpty ? null : trimmedNote,
     );
     final refunds = await transactions.listRefundsFor(transactionId);
-    if (RefundPolicy.refundableCents(
-          original: updated,
-          existingRefunds: refunds,
-        ) <
-        0) {
-      throw const TransactionRuleViolation('修改后的消费金额不能小于累计退款金额。');
+    final activeRefunds = refunds.where(
+      (entry) => !entry.isDeleted && entry.entryKind == EntryKind.refund,
+    );
+    final activeWithdrawals = refunds.where(
+      (entry) => !entry.isDeleted && entry.entryKind == EntryKind.withdrawal,
+    );
+    if (updated.flowType == FlowType.expense) {
+      if (RefundPolicy.refundableCents(
+            original: updated,
+            existingRefunds: activeRefunds,
+          ) <
+          0) {
+        throw const TransactionRuleViolation('修改后的消费金额不能小于累计退款金额。');
+      }
+    } else if (activeRefunds.isNotEmpty) {
+      throw const TransactionRuleViolation('已有退款的消费流水不能改为存款或理财。');
+    }
+    if (updated.flowType != FlowType.expense) {
+      if (WithdrawalPolicy.withdrawableCents(
+            original: updated,
+            existingWithdrawals: activeWithdrawals,
+          ) <
+          0) {
+        throw const TransactionRuleViolation('修改后的金额不能小于累计提取金额。');
+      }
+    } else if (activeWithdrawals.isNotEmpty) {
+      throw const TransactionRuleViolation('已有提取记录的流水不能改为消费。');
     }
     await transactions.update(updated);
     return updated;

@@ -9,6 +9,7 @@ final class SalaryCycle {
     required this.startedAt,
     required this.expectedPayDate,
     required this.status,
+    this.carryoverCents = 0,
     this.closedAt,
     this.finalRemainingCents,
   }) {
@@ -17,6 +18,9 @@ final class SalaryCycle {
     }
     if (salaryCents < 0) {
       throw ArgumentError.value(salaryCents, 'salaryCents', '工资不能小于 0。');
+    }
+    if (carryoverCents < 0) {
+      throw ArgumentError.value(carryoverCents, 'carryoverCents', '结转不能小于 0。');
     }
     if (status == SalaryCycleStatus.active &&
         (closedAt != null || finalRemainingCents != null)) {
@@ -30,6 +34,7 @@ final class SalaryCycle {
 
   final String id;
   final int salaryCents;
+  final int carryoverCents;
   final DateTime startedAt;
   final LocalDate expectedPayDate;
   final SalaryCycleStatus status;
@@ -44,6 +49,7 @@ final class SalaryCycle {
     return SalaryCycle(
       id: id,
       salaryCents: salaryCents,
+      carryoverCents: carryoverCents,
       startedAt: startedAt,
       expectedPayDate: expectedPayDate,
       status: SalaryCycleStatus.closed,

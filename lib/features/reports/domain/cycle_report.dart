@@ -9,12 +9,17 @@ final class CycleReport {
     required this.summary,
     required this.expenseByCategory,
     required this.dailyNetExpense,
+    this.previousCycle,
     this.previousSummary,
-  });
+  }) : assert(
+         (previousCycle == null) == (previousSummary == null),
+         'Previous cycle and summary must be provided together.',
+       );
 
   factory CycleReport.fromData({
     required SalaryCycle cycle,
     required Iterable<TransactionEntry> transactions,
+    SalaryCycle? previousCycle,
     SalarySummary? previousSummary,
   }) {
     final active = transactions.where((entry) => !entry.isDeleted).toList();
@@ -41,10 +46,12 @@ final class CycleReport {
       cycle: cycle,
       summary: SalarySummary.fromTransactions(
         salaryCents: cycle.salaryCents,
+        carryoverCents: cycle.carryoverCents,
         transactions: active,
       ),
       expenseByCategory: Map.unmodifiable(categoryTotals),
       dailyNetExpense: Map.unmodifiable(dailyTotals),
+      previousCycle: previousCycle,
       previousSummary: previousSummary,
     );
   }
@@ -53,5 +60,6 @@ final class CycleReport {
   final SalarySummary summary;
   final Map<String, int> expenseByCategory;
   final Map<LocalDate, int> dailyNetExpense;
+  final SalaryCycle? previousCycle;
   final SalarySummary? previousSummary;
 }

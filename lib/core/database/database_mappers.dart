@@ -9,6 +9,7 @@ extension SalaryCycleRecordMapper on SalaryCycleRecord {
   SalaryCycle toDomain() => SalaryCycle(
     id: id,
     salaryCents: salaryCents,
+    carryoverCents: carryoverCents,
     startedAt: DateTime.fromMillisecondsSinceEpoch(startedAt),
     expectedPayDate: LocalDate.parse(expectedPayDate),
     status: SalaryCycleStatus.values.byName(status),
@@ -25,6 +26,13 @@ extension AppSettingRecordMapper on AppSettingRecord {
     currencyCode: currencyCode,
     onboardingCompleted: onboardingCompleted,
     themePreference: AppThemePreference.values.byName(themeMode),
+    hideAmounts: hideAmounts,
+    appLockEnabled: appLockEnabled,
+    autoLockMinutes: autoLockMinutes,
+    lastBackupAt: lastBackupAt == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(lastBackupAt!),
+    backupReminderDays: backupReminderDays,
     updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAt),
   );
 }
@@ -36,9 +44,11 @@ extension CategoryRecordMapper on CategoryRecord {
     name: name,
     flowType: FlowType.values.byName(flowType),
     iconKey: iconKey,
+    colorKey: colorKey,
     sortOrder: sortOrder,
     isSystem: isSystem,
     isActive: isActive,
+    showOnHome: showOnHome,
   );
 }
 

@@ -152,7 +152,6 @@ final class DriftTransactionRepository implements TransactionRepository {
     await (_database.update(_database.transactionRecords)..where(
           (row) =>
               row.reversesTransactionId.equals(transactionId) &
-              row.entryKind.equals(EntryKind.refund.name) &
               row.deletedAt.isNull(),
         ))
         .write(

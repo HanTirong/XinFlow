@@ -4,6 +4,9 @@ import 'package:xinflow/core/database/app_database.dart';
 import 'package:xinflow/core/id/id_generator.dart';
 import 'package:xinflow/core/id/uuid_id_generator.dart';
 import 'package:xinflow/features/backup/application/xinflow_backup_service.dart';
+import 'package:xinflow/features/budgets/data/budget_repository.dart';
+import 'package:xinflow/features/budgets/data/drift_budget_repository.dart';
+import 'package:xinflow/features/budgets/domain/budget.dart';
 import 'package:xinflow/features/categories/data/category_repository.dart';
 import 'package:xinflow/features/categories/data/drift_category_repository.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
@@ -13,16 +16,22 @@ import 'package:xinflow/features/onboarding/data/drift_onboarding_repository.dar
 import 'package:xinflow/features/onboarding/data/onboarding_repository.dart';
 import 'package:xinflow/features/onboarding/domain/app_bootstrap.dart';
 import 'package:xinflow/features/reports/domain/cycle_report.dart';
+import 'package:xinflow/features/reports/domain/cross_cycle_report.dart';
 import 'package:xinflow/features/salary_cycles/data/drift_salary_cycle_repository.dart';
 import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart';
+import 'package:xinflow/features/salary_cycles/data/drift_closed_cycle_correction_repository.dart';
 import 'package:xinflow/features/salary_cycles/application/close_and_start_next_cycle.dart';
+import 'package:xinflow/features/salary_cycles/application/correct_closed_cycle.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_summary.dart';
 import 'package:xinflow/features/settings/data/drift_settings_repository.dart';
 import 'package:xinflow/features/settings/data/settings_repository.dart';
+import 'package:xinflow/features/settings/data/local_data_service.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
+import 'package:xinflow/features/security/application/device_authenticator.dart';
 import 'package:xinflow/features/transactions/application/create_allocation.dart';
 import 'package:xinflow/features/transactions/application/create_refund.dart';
+import 'package:xinflow/features/transactions/application/create_withdrawal.dart';
 import 'package:xinflow/features/transactions/application/delete_allocation.dart';
 import 'package:xinflow/features/transactions/application/update_allocation.dart';
 import 'package:xinflow/features/transactions/data/drift_transaction_repository.dart';
@@ -35,6 +44,15 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
   return database;
 });
 
+final deviceAuthenticatorProvider = Provider<DeviceAuthenticator>(
+  (ref) => LocalDeviceAuthenticator(),
+);
+
+final deviceAuthenticationSessionProvider =
+    Provider<DeviceAuthenticationSession>(
+      (ref) => DeviceAuthenticationSession(),
+    );
+
 final clockProvider = Provider<Clock>((ref) => const SystemClock());
 
 final idGeneratorProvider = Provider<IdGenerator>((ref) => UuidIdGenerator());
@@ -44,6 +62,14 @@ final backupServiceProvider = Provider<XinFlowBackupService>(
     database: ref.watch(appDatabaseProvider),
     clock: ref.watch(clockProvider),
   ),
+);
+
+final budgetRepositoryProvider = Provider<BudgetRepository>(
+  (ref) => DriftBudgetRepository(ref.watch(appDatabaseProvider)),
+);
+
+final cycleBudgetsProvider = StreamProvider.family<List<Budget>, String>(
+  (ref, cycleId) => ref.watch(budgetRepositoryProvider).watchForCycle(cycleId),
 );
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>(
@@ -58,6 +84,18 @@ final closeAndStartNextCycleProvider = Provider<CloseAndStartNextCycle>(
   (ref) => CloseAndStartNextCycle(
     salaryCycles: ref.watch(salaryCycleRepositoryProvider),
     transactions: ref.watch(transactionRepositoryProvider),
+    clock: ref.watch(clockProvider),
+    idGenerator: ref.watch(idGeneratorProvider),
+  ),
+);
+
+final correctClosedCycleProvider = Provider<CorrectClosedCycle>(
+  (ref) => CorrectClosedCycle(
+    categories: ref.watch(categoryRepositoryProvider),
+    repository: DriftClosedCycleCorrectionRepository(
+      ref.watch(appDatabaseProvider),
+      clock: ref.watch(clockProvider),
+    ),
     clock: ref.watch(clockProvider),
     idGenerator: ref.watch(idGeneratorProvider),
   ),
@@ -92,22 +130,86 @@ final cycleReportProvider = FutureProvider.family<CycleReport, String>((
   final chronological = [...cycles]
     ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
   final index = chronological.indexWhere((item) => item.id == cycleId);
+  SalaryCycle? previousCycle;
   SalarySummary? previousSummary;
   if (index > 0) {
-    final previous = chronological[index - 1];
+    previousCycle = chronological[index - 1];
     final previousEntries = await ref
         .watch(transactionRepositoryProvider)
-        .listCycleTransactions(previous.id);
+        .listCycleTransactions(previousCycle.id);
     previousSummary = SalarySummary.fromTransactions(
-      salaryCents: previous.salaryCents,
+      salaryCents: previousCycle.salaryCents,
+      carryoverCents: previousCycle.carryoverCents,
       transactions: previousEntries,
     );
   }
   return CycleReport.fromData(
     cycle: cycle,
     transactions: entries,
+    previousCycle: previousCycle,
     previousSummary: previousSummary,
   );
+});
+
+final crossCycleReportProvider = FutureProvider<CrossCycleReport>((ref) async {
+  final cycles = [...await ref.watch(salaryCyclesProvider.future)]
+    ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+  final points = <CycleTrendPoint>[];
+  final categoryByCycle = <String, Map<String, int>>{};
+  for (final cycle in cycles) {
+    final entries = await ref
+        .watch(transactionRepositoryProvider)
+        .listCycleTransactions(cycle.id);
+    points.add(
+      CycleTrendPoint(
+        cycle: cycle,
+        summary: SalarySummary.fromTransactions(
+          salaryCents: cycle.salaryCents,
+          carryoverCents: cycle.carryoverCents,
+          transactions: entries,
+        ),
+      ),
+    );
+    final totals = <String, int>{};
+    for (final entry in entries.where(
+      (entry) => !entry.isDeleted && entry.flowType == FlowType.expense,
+    )) {
+      totals.update(
+        entry.categoryId,
+        (value) =>
+            value +
+            (entry.entryKind == EntryKind.refund
+                ? -entry.amountCents
+                : entry.amountCents),
+        ifAbsent: () => entry.entryKind == EntryKind.refund
+            ? -entry.amountCents
+            : entry.amountCents,
+      );
+    }
+    categoryByCycle[cycle.id] = totals;
+  }
+  final categoryIds = categoryByCycle.values
+      .expand((totals) => totals.keys)
+      .toSet();
+  final current = cycles.isEmpty
+      ? const <String, int>{}
+      : categoryByCycle[cycles.last.id]!;
+  final previous = cycles.length < 2
+      ? const <String, int>{}
+      : categoryByCycle[cycles[cycles.length - 2].id]!;
+  final trends = [
+    for (final categoryId in categoryIds)
+      CategoryTrend(
+        categoryId: categoryId,
+        currentCents: current[categoryId] ?? 0,
+        previousCents: previous[categoryId] ?? 0,
+        totalCents: categoryByCycle.values.fold<int>(
+          0,
+          (total, values) => total + (values[categoryId] ?? 0),
+        ),
+      ),
+  ]..sort((a, b) => b.totalCents.compareTo(a.totalCents));
+  return CrossCycleReport(points: points, categoryTrends: trends);
 });
 
 final transactionRepositoryProvider = Provider<TransactionRepository>(
@@ -141,6 +243,15 @@ final createAllocationProvider = Provider<CreateAllocation>(
 
 final createRefundProvider = Provider<CreateRefund>(
   (ref) => CreateRefund(
+    salaryCycles: ref.watch(salaryCycleRepositoryProvider),
+    transactions: ref.watch(transactionRepositoryProvider),
+    clock: ref.watch(clockProvider),
+    idGenerator: ref.watch(idGeneratorProvider),
+  ),
+);
+
+final createWithdrawalProvider = Provider<CreateWithdrawal>(
+  (ref) => CreateWithdrawal(
     salaryCycles: ref.watch(salaryCycleRepositoryProvider),
     transactions: ref.watch(transactionRepositoryProvider),
     clock: ref.watch(clockProvider),
@@ -190,6 +301,18 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
     clock: ref.watch(clockProvider),
   ),
 );
+
+final localDataServiceProvider = Provider<LocalDataService>(
+  (ref) => LocalDataService(ref.watch(appDatabaseProvider)),
+);
+
+final localDataOverviewProvider = FutureProvider<LocalDataOverview>(
+  (ref) => ref.watch(localDataServiceProvider).overview(),
+);
+
+final appSettingsProvider = StreamProvider<AppSettings?>((ref) {
+  return ref.watch(settingsRepositoryProvider).watch();
+});
 
 final themePreferenceProvider = StreamProvider<AppThemePreference>(
   (ref) => ref.watch(settingsRepositoryProvider).watchThemePreference(),

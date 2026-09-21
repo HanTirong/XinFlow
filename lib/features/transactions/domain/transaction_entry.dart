@@ -2,7 +2,7 @@ import 'package:xinflow/core/date/local_date.dart';
 
 enum FlowType { expense, saving, investment }
 
-enum EntryKind { allocation, refund }
+enum EntryKind { allocation, refund, withdrawal }
 
 final class TransactionEntry {
   TransactionEntry({
@@ -28,11 +28,15 @@ final class TransactionEntry {
     if (note != null && note!.length > 200) {
       throw ArgumentError.value(note, 'note', '备注不能超过 200 个字符。');
     }
-    if (entryKind == EntryKind.refund) {
-      if (flowType != FlowType.expense || reversesTransactionId == null) {
-        throw ArgumentError('退款必须属于消费，并关联原消费记录。');
-      }
-    } else if (reversesTransactionId != null) {
+    if (entryKind == EntryKind.refund &&
+        (flowType != FlowType.expense || reversesTransactionId == null)) {
+      throw ArgumentError('退款必须属于消费，并关联原消费记录。');
+    }
+    if (entryKind == EntryKind.withdrawal &&
+        (flowType == FlowType.expense || reversesTransactionId == null)) {
+      throw ArgumentError('提取必须属于存款或理财，并关联原分配记录。');
+    }
+    if (entryKind == EntryKind.allocation && reversesTransactionId != null) {
       throw ArgumentError('普通分配记录不能关联被冲减流水。');
     }
   }

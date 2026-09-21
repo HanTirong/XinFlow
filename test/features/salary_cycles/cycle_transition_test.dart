@@ -37,9 +37,39 @@ void main() {
       expect(transition.closedCycle.finalRemainingCents, 400000);
       expect(transition.newActiveCycle.status, SalaryCycleStatus.active);
       expect(transition.newActiveCycle.salaryCents, 1200000);
+      expect(transition.newActiveCycle.carryoverCents, 0);
       expect(transition.newActiveCycle.startedAt, DateTime.utc(2026, 9, 15));
     },
   );
+
+  test('only carries a positive remaining balance when explicitly enabled', () {
+    final current = SalaryCycle(
+      id: 'cycle-1',
+      salaryCents: 1000000,
+      startedAt: DateTime.utc(2026, 8, 15),
+      expectedPayDate: const LocalDate(2026, 9, 15),
+      status: SalaryCycleStatus.active,
+    );
+    const summary = SalarySummary(
+      salaryCents: 1000000,
+      expenseAllocatedCents: 400000,
+      expenseRefundedCents: 0,
+      savingCents: 100000,
+      investmentCents: 100000,
+    );
+    final transition = SalaryCyclePolicy.closeAndStartNext(
+      currentCycle: current,
+      currentSummary: summary,
+      newCycleId: 'cycle-2',
+      newSalaryCents: 1200000,
+      confirmedAt: DateTime.utc(2026, 9, 15, 9),
+      newCycleStartedAt: DateTime.utc(2026, 9, 15),
+      nextExpectedPayDate: const LocalDate(2026, 10, 15),
+      carryPositiveRemaining: true,
+    );
+
+    expect(transition.newActiveCycle.carryoverCents, 400000);
+  });
 
   test('rejects transitioning a cycle that is already closed', () {
     final closed = SalaryCycle(

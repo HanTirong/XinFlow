@@ -72,6 +72,7 @@ final class HomeSnapshot {
       cycle: cycle,
       summary: SalarySummary.fromTransactions(
         salaryCents: cycle.salaryCents,
+        carryoverCents: cycle.carryoverCents,
         transactions: transactions,
       ),
       daysUntilPayday: PaydayCalculator.daysUntilNext(
@@ -107,6 +108,7 @@ final class HomeSnapshot {
       cycle: cycle,
       summary: SalarySummary.fromTransactions(
         salaryCents: cycle.salaryCents,
+        carryoverCents: cycle.carryoverCents,
         transactions: activeTransactions,
       ),
       daysUntilPayday: today.daysUntil(cycle.expectedPayDate).clamp(0, 99999),

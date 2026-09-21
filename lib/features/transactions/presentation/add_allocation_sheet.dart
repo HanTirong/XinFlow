@@ -5,15 +5,22 @@ import 'package:xinflow/app/providers.dart';
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 enum AllocationEditorResult { created, updated, deleted, refundRequested }
 
 final class AddAllocationSheet extends ConsumerStatefulWidget {
-  const AddAllocationSheet({this.initialCategoryId, this.entry, super.key});
+  const AddAllocationSheet({
+    this.initialCategoryId,
+    this.entry,
+    this.historicalCycle,
+    super.key,
+  });
 
   final String? initialCategoryId;
   final TransactionEntry? entry;
+  final SalaryCycle? historicalCycle;
 
   @override
   ConsumerState<AddAllocationSheet> createState() => _AddAllocationSheetState();
@@ -45,7 +52,9 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
     _subcategoryId = entry?.subcategoryId;
     _occurredOn =
         entry?.occurredOn ??
-        LocalDate.fromDateTime(ref.read(clockProvider).now());
+        (widget.historicalCycle == null
+            ? LocalDate.fromDateTime(ref.read(clockProvider).now())
+            : LocalDate.fromDateTime(widget.historicalCycle!.startedAt));
   }
 
   @override
@@ -61,11 +70,28 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       _occurredOn.month,
       _occurredOn.day,
     );
+    final cycle = widget.historicalCycle;
+    final firstDate = cycle == null
+        ? DateTime(2000)
+        : DateTime(
+            cycle.startedAt.year,
+            cycle.startedAt.month,
+            cycle.startedAt.day,
+          );
+    final cycleEnd = cycle == null
+        ? null
+        : DateTime(
+            cycle.expectedPayDate.year,
+            cycle.expectedPayDate.month,
+            cycle.expectedPayDate.day,
+          ).subtract(const Duration(days: 1));
     final selected = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(2000),
-      lastDate: ref.read(clockProvider).now().add(const Duration(days: 1)),
+      firstDate: firstDate,
+      lastDate:
+          cycleEnd ??
+          ref.read(clockProvider).now().add(const Duration(days: 1)),
     );
     if (selected != null && mounted) {
       setState(() => _occurredOn = LocalDate.fromDateTime(selected));
@@ -85,7 +111,30 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
     });
     try {
       final entry = widget.entry;
-      if (entry == null) {
+      final historicalCycle = widget.historicalCycle;
+      if (historicalCycle != null && entry == null) {
+        await ref
+            .read(correctClosedCycleProvider)
+            .createAllocation(
+              cycleId: historicalCycle.id,
+              amountCents: Money.parse(_amountController.text).cents,
+              categoryId: _categoryId!,
+              subcategoryId: _subcategoryId,
+              occurredOn: _occurredOn,
+              note: _noteController.text,
+            );
+      } else if (historicalCycle != null) {
+        await ref
+            .read(correctClosedCycleProvider)
+            .updateAllocation(
+              transactionId: entry!.id,
+              amountCents: Money.parse(_amountController.text).cents,
+              categoryId: _categoryId!,
+              subcategoryId: _subcategoryId,
+              occurredOn: _occurredOn,
+              note: _noteController.text,
+            );
+      } else if (entry == null) {
         await ref
             .read(createAllocationProvider)
             .execute(
@@ -134,7 +183,11 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除这笔流水？'),
-        content: const Text('删除后将从当前周期汇总中移除，但会保留软删除记录。'),
+        content: Text(
+          widget.historicalCycle == null
+              ? '删除后将从当前周期汇总中移除，但会保留软删除记录。'
+              : '删除后将重新计算该历史周期的最终余额，并保留软删除记录。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -154,7 +207,11 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       _errorMessage = null;
     });
     try {
-      await ref.read(deleteAllocationProvider).execute(entry.id);
+      if (widget.historicalCycle == null) {
+        await ref.read(deleteAllocationProvider).execute(entry.id);
+      } else {
+        await ref.read(correctClosedCycleProvider).deleteAllocation(entry.id);
+      }
       if (mounted) {
         Navigator.of(context).pop(AllocationEditorResult.deleted);
       }
@@ -196,9 +253,24 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  widget.entry == null ? '记一笔' : '编辑流水',
+                  widget.historicalCycle == null
+                      ? widget.entry == null
+                            ? '记一笔'
+                            : '编辑流水'
+                      : widget.entry == null
+                      ? '补记历史流水'
+                      : '修正历史流水',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+                if (widget.historicalCycle != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '修改后会重新计算该历史周期的最终余额，不会影响当前周期。',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 TextFormField(
                   controller: _amountController,
@@ -285,16 +357,19 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
                 ),
                 if (widget.entry != null) ...[
                   const SizedBox(height: 10),
-                  if (widget.entry!.flowType == FlowType.expense)
-                    OutlinedButton.icon(
-                      onPressed: _isSaving
-                          ? null
-                          : () => Navigator.of(
-                              context,
-                            ).pop(AllocationEditorResult.refundRequested),
-                      icon: const Icon(Icons.currency_exchange_rounded),
-                      label: const Text('记录退款'),
+                  OutlinedButton.icon(
+                    onPressed: _isSaving
+                        ? null
+                        : () => Navigator.of(
+                            context,
+                          ).pop(AllocationEditorResult.refundRequested),
+                    icon: const Icon(Icons.currency_exchange_rounded),
+                    label: Text(
+                      widget.entry!.flowType == FlowType.expense
+                          ? '记录退款'
+                          : '记录提取',
                     ),
+                  ),
                   const SizedBox(height: 4),
                   TextButton.icon(
                     onPressed: _isSaving ? null : _delete,

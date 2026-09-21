@@ -25,6 +25,12 @@ final class DriftSettingsRepository implements SettingsRepository {
   }
 
   @override
+  Stream<AppSettings?> watch() => _database
+      .select(_database.appSettingRecords)
+      .watchSingleOrNull()
+      .map((row) => row?.toDomain());
+
+  @override
   Stream<AppThemePreference> watchThemePreference() => _database
       .select(_database.appSettingRecords)
       .watchSingleOrNull()
@@ -94,5 +100,56 @@ final class DriftSettingsRepository implements SettingsRepository {
             ),
           );
     });
+  }
+
+  @override
+  Future<void> updatePrivacy({
+    bool? hideAmounts,
+    bool? appLockEnabled,
+    int? autoLockMinutes,
+    int? backupReminderDays,
+  }) async {
+    if (autoLockMinutes != null && autoLockMinutes < 0) {
+      throw ArgumentError.value(autoLockMinutes, 'autoLockMinutes');
+    }
+    if (backupReminderDays != null &&
+        (backupReminderDays < 1 || backupReminderDays > 365)) {
+      throw RangeError.range(backupReminderDays, 1, 365, 'backupReminderDays');
+    }
+    final affected =
+        await (_database.update(
+          _database.appSettingRecords,
+        )..where((row) => row.singletonId.equals(1))).write(
+          AppSettingRecordsCompanion(
+            hideAmounts: hideAmounts == null
+                ? const Value.absent()
+                : Value(hideAmounts),
+            appLockEnabled: appLockEnabled == null
+                ? const Value.absent()
+                : Value(appLockEnabled),
+            autoLockMinutes: autoLockMinutes == null
+                ? const Value.absent()
+                : Value(autoLockMinutes),
+            backupReminderDays: backupReminderDays == null
+                ? const Value.absent()
+                : Value(backupReminderDays),
+            updatedAt: Value(_clock.now().toUtc().millisecondsSinceEpoch),
+          ),
+        );
+    if (affected != 1) throw StateError('尚未完成首次设置。');
+  }
+
+  @override
+  Future<void> markBackupCreated(DateTime at) async {
+    final affected =
+        await (_database.update(
+          _database.appSettingRecords,
+        )..where((row) => row.singletonId.equals(1))).write(
+          AppSettingRecordsCompanion(
+            lastBackupAt: Value(at.toUtc().millisecondsSinceEpoch),
+            updatedAt: Value(at.toUtc().millisecondsSinceEpoch),
+          ),
+        );
+    if (affected != 1) throw StateError('尚未完成首次设置。');
   }
 }
