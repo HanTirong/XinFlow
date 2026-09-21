@@ -12,6 +12,9 @@ final class AppSettings {
     this.autoLockMinutes = 5,
     this.lastBackupAt,
     this.backupReminderDays = 7,
+    this.dailyReminderEnabled = false,
+    this.dailyReminderHour = 21,
+    this.dailyReminderMinute = 0,
   }) {
     if (salaryDay < 1 || salaryDay > 31) {
       throw RangeError.range(salaryDay, 1, 31, 'salaryDay');
@@ -25,6 +28,12 @@ final class AppSettings {
     if (backupReminderDays < 1 || backupReminderDays > 365) {
       throw RangeError.range(backupReminderDays, 1, 365, 'backupReminderDays');
     }
+    if (dailyReminderHour < 0 || dailyReminderHour > 23) {
+      throw RangeError.range(dailyReminderHour, 0, 23, 'dailyReminderHour');
+    }
+    if (dailyReminderMinute < 0 || dailyReminderMinute > 59) {
+      throw RangeError.range(dailyReminderMinute, 0, 59, 'dailyReminderMinute');
+    }
   }
 
   final int salaryDay;
@@ -36,5 +45,8 @@ final class AppSettings {
   final int autoLockMinutes;
   final DateTime? lastBackupAt;
   final int backupReminderDays;
+  final bool dailyReminderEnabled;
+  final int dailyReminderHour;
+  final int dailyReminderMinute;
   final DateTime updatedAt;
 }

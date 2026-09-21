@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
@@ -6,13 +8,42 @@ import 'package:xinflow/features/navigation/presentation/main_shell.dart';
 import 'package:xinflow/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:xinflow/features/settings/domain/app_settings.dart';
 import 'package:xinflow/features/security/presentation/app_lock_gate.dart';
+import 'package:xinflow/features/reminders/application/daily_reminder_notifications.dart';
 
-final class XinFlowApp extends ConsumerWidget {
+final class XinFlowApp extends ConsumerStatefulWidget {
   const XinFlowApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<XinFlowApp> createState() => _XinFlowAppState();
+}
+
+final class _XinFlowAppState extends ConsumerState<XinFlowApp> {
+  String? _reminderSignature;
+
+  @override
+  Widget build(BuildContext context) {
     final startup = ref.watch(startupProvider);
+    final reminderSettings = ref.watch(appSettingsProvider);
+    if (reminderSettings is AsyncData<AppSettings?>) {
+      final settings = reminderSettings.value;
+      final signature = settings == null
+          ? 'off'
+          : '${settings.dailyReminderEnabled}:${settings.dailyReminderHour}:'
+                '${settings.dailyReminderMinute}';
+      if (_reminderSignature != signature) {
+        _reminderSignature = signature;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            DailyReminderNotifications.instance.sync(settings).catchError((
+              Object error,
+            ) {
+              debugPrint('Daily reminder scheduling failed: $error');
+            }),
+          );
+        });
+      }
+    }
     final themePreference = switch (ref.watch(themePreferenceProvider)) {
       AsyncData(:final value) => value,
       _ => AppThemePreference.system,

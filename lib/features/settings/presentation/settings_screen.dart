@@ -7,6 +7,7 @@ import 'package:xinflow/features/budgets/presentation/budget_management_card.dar
 import 'package:xinflow/features/settings/domain/app_settings.dart';
 import 'package:xinflow/features/settings/presentation/data_management_card.dart';
 import 'package:xinflow/features/security/presentation/privacy_security_screen.dart';
+import 'package:xinflow/features/reminders/presentation/daily_reminder_card.dart';
 
 final class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -124,6 +125,8 @@ final class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           const BudgetManagementCard(),
           const SizedBox(height: 12),
+          const DailyReminderCard(),
+          const SizedBox(height: 12),
           const DataManagementCard(),
           const SizedBox(height: 12),
           const PrivacySecurityCard(),
@@ -136,7 +139,7 @@ final class SettingsScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
               title: Text('薪流 0.1.0'),
-              subtitle: Text('数据库版本 3 · 备份格式版本 2'),
+              subtitle: Text('数据库版本 4 · 备份格式版本 2'),
             ),
           ),
         ],

@@ -103,6 +103,30 @@ final class DriftSettingsRepository implements SettingsRepository {
   }
 
   @override
+  Future<void> updateDailyReminder({
+    required bool enabled,
+    required int hour,
+    required int minute,
+  }) async {
+    if (hour < 0 || hour > 23) throw RangeError.range(hour, 0, 23, 'hour');
+    if (minute < 0 || minute > 59) {
+      throw RangeError.range(minute, 0, 59, 'minute');
+    }
+    final affected =
+        await (_database.update(
+          _database.appSettingRecords,
+        )..where((row) => row.singletonId.equals(1))).write(
+          AppSettingRecordsCompanion(
+            dailyReminderEnabled: Value(enabled),
+            dailyReminderHour: Value(hour),
+            dailyReminderMinute: Value(minute),
+            updatedAt: Value(_clock.now().toUtc().millisecondsSinceEpoch),
+          ),
+        );
+    if (affected != 1) throw StateError('尚未完成首次设置。');
+  }
+
+  @override
   Future<void> updatePrivacy({
     bool? hideAmounts,
     bool? appLockEnabled,

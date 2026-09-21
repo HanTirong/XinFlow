@@ -11,6 +11,12 @@ abstract interface class SettingsRepository {
 
   Future<void> updateSalaryDay(int salaryDay);
 
+  Future<void> updateDailyReminder({
+    required bool enabled,
+    required int hour,
+    required int minute,
+  });
+
   Future<void> updatePrivacy({
     bool? hideAmounts,
     bool? appLockEnabled,

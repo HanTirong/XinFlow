@@ -14,6 +14,7 @@ import 'package:xinflow/features/transactions/presentation/add_allocation_sheet.
 import 'package:xinflow/features/transactions/presentation/add_refund_sheet.dart';
 import 'package:xinflow/features/transactions/presentation/transactions_screen.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
+import 'package:xinflow/features/reminders/application/daily_reminder_notifications.dart';
 
 final class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
@@ -25,6 +26,33 @@ final class MainShell extends ConsumerStatefulWidget {
 final class _MainShellState extends ConsumerState<MainShell> {
   int _selectedIndex = 0;
   bool _amountsRevealed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    DailyReminderNotifications.instance.openRequests.addListener(
+      _openFromReminder,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openFromReminder());
+  }
+
+  @override
+  void dispose() {
+    DailyReminderNotifications.instance.openRequests.removeListener(
+      _openFromReminder,
+    );
+    super.dispose();
+  }
+
+  void _openFromReminder() {
+    if (!mounted || !DailyReminderNotifications.instance.takePendingOpen()) {
+      return;
+    }
+    setState(() => _selectedIndex = 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openAddAllocation();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

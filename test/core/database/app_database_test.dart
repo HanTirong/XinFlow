@@ -188,6 +188,47 @@ void main() {
     expect(transactionSql.read<String>('sql'), contains('withdrawal'));
   });
 
+  test('version 3 data gains disabled daily reminders without loss', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'xinflow_v3_to_v4_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/xinflow.sqlite');
+    final original = AppDatabase.forTesting(NativeDatabase(file));
+    await CompleteOnboarding(
+      repository: DriftOnboardingRepository(original),
+      clock: _FixedClock(DateTime(2026, 9, 21, 9)),
+      idGenerator: const _FixedIdGenerator('cycle-v3'),
+    ).execute(salaryDay: 10, salaryCents: 1300000);
+    await original.close();
+
+    final raw = sqlite.sqlite3.open(file.path);
+    raw.execute('ALTER TABLE app_settings DROP COLUMN daily_reminder_enabled');
+    raw.execute('ALTER TABLE app_settings DROP COLUMN daily_reminder_hour');
+    raw.execute('ALTER TABLE app_settings DROP COLUMN daily_reminder_minute');
+    raw.execute('PRAGMA user_version = 3');
+    raw.close();
+
+    final upgraded = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final settings = DriftSettingsRepository(upgraded);
+    final loaded = await settings.load();
+    expect(loaded.salaryDay, 10);
+    expect(loaded.dailyReminderEnabled, isFalse);
+    expect(loaded.dailyReminderHour, 21);
+    expect(loaded.dailyReminderMinute, 0);
+    expect(
+      await upgraded.select(upgraded.salaryCycleRecords).get(),
+      hasLength(1),
+    );
+
+    await settings.updateDailyReminder(enabled: true, hour: 20, minute: 45);
+    final updated = await settings.load();
+    expect(updated.dailyReminderEnabled, isTrue);
+    expect(updated.dailyReminderHour, 20);
+    expect(updated.dailyReminderMinute, 45);
+  });
+
   test(
     'completes onboarding atomically and persists one active cycle',
     () async {

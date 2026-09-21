@@ -33,6 +33,9 @@ extension AppSettingRecordMapper on AppSettingRecord {
         ? null
         : DateTime.fromMillisecondsSinceEpoch(lastBackupAt!),
     backupReminderDays: backupReminderDays,
+    dailyReminderEnabled: dailyReminderEnabled,
+    dailyReminderHour: dailyReminderHour,
+    dailyReminderMinute: dailyReminderMinute,
     updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAt),
   );
 }

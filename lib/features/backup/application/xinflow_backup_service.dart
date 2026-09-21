@@ -828,7 +828,10 @@ final class _BackupPayload {
                 ..putIfAbsent('appLockEnabled', () => false)
                 ..putIfAbsent('autoLockMinutes', () => 5)
                 ..putIfAbsent('lastBackupAt', () => null)
-                ..putIfAbsent('backupReminderDays', () => 7);
+                ..putIfAbsent('backupReminderDays', () => 7)
+                ..putIfAbsent('dailyReminderEnabled', () => false)
+                ..putIfAbsent('dailyReminderHour', () => 21)
+                ..putIfAbsent('dailyReminderMinute', () => 0);
               return AppSettingRecord.fromJson(row);
             })
             .toList(growable: false),

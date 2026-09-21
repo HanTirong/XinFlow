@@ -2445,6 +2445,47 @@ class $AppSettingRecordsTable extends AppSettingRecords
         'NOT NULL DEFAULT 7 CHECK (backup_reminder_days BETWEEN 1 AND 365)',
     defaultValue: const CustomExpression('7'),
   );
+  static const VerificationMeta _dailyReminderEnabledMeta =
+      const VerificationMeta('dailyReminderEnabled');
+  @override
+  late final GeneratedColumn<bool> dailyReminderEnabled = GeneratedColumn<bool>(
+    'daily_reminder_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("daily_reminder_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _dailyReminderHourMeta = const VerificationMeta(
+    'dailyReminderHour',
+  );
+  @override
+  late final GeneratedColumn<int> dailyReminderHour = GeneratedColumn<int>(
+    'daily_reminder_hour',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 21 CHECK (daily_reminder_hour BETWEEN 0 AND 23)',
+    defaultValue: const CustomExpression('21'),
+  );
+  static const VerificationMeta _dailyReminderMinuteMeta =
+      const VerificationMeta('dailyReminderMinute');
+  @override
+  late final GeneratedColumn<int> dailyReminderMinute = GeneratedColumn<int>(
+    'daily_reminder_minute',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 0 CHECK (daily_reminder_minute BETWEEN 0 AND 59)',
+    defaultValue: const CustomExpression('0'),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2468,6 +2509,9 @@ class $AppSettingRecordsTable extends AppSettingRecords
     autoLockMinutes,
     lastBackupAt,
     backupReminderDays,
+    dailyReminderEnabled,
+    dailyReminderHour,
+    dailyReminderMinute,
     updatedAt,
   ];
   @override
@@ -2570,6 +2614,33 @@ class $AppSettingRecordsTable extends AppSettingRecords
         ),
       );
     }
+    if (data.containsKey('daily_reminder_enabled')) {
+      context.handle(
+        _dailyReminderEnabledMeta,
+        dailyReminderEnabled.isAcceptableOrUnknown(
+          data['daily_reminder_enabled']!,
+          _dailyReminderEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('daily_reminder_hour')) {
+      context.handle(
+        _dailyReminderHourMeta,
+        dailyReminderHour.isAcceptableOrUnknown(
+          data['daily_reminder_hour']!,
+          _dailyReminderHourMeta,
+        ),
+      );
+    }
+    if (data.containsKey('daily_reminder_minute')) {
+      context.handle(
+        _dailyReminderMinuteMeta,
+        dailyReminderMinute.isAcceptableOrUnknown(
+          data['daily_reminder_minute']!,
+          _dailyReminderMinuteMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2627,6 +2698,18 @@ class $AppSettingRecordsTable extends AppSettingRecords
         DriftSqlType.int,
         data['${effectivePrefix}backup_reminder_days'],
       )!,
+      dailyReminderEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}daily_reminder_enabled'],
+      )!,
+      dailyReminderHour: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}daily_reminder_hour'],
+      )!,
+      dailyReminderMinute: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}daily_reminder_minute'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
@@ -2652,6 +2735,9 @@ class AppSettingRecord extends DataClass
   final int autoLockMinutes;
   final int? lastBackupAt;
   final int backupReminderDays;
+  final bool dailyReminderEnabled;
+  final int dailyReminderHour;
+  final int dailyReminderMinute;
   final int updatedAt;
   const AppSettingRecord({
     required this.singletonId,
@@ -2664,6 +2750,9 @@ class AppSettingRecord extends DataClass
     required this.autoLockMinutes,
     this.lastBackupAt,
     required this.backupReminderDays,
+    required this.dailyReminderEnabled,
+    required this.dailyReminderHour,
+    required this.dailyReminderMinute,
     required this.updatedAt,
   });
   @override
@@ -2681,6 +2770,9 @@ class AppSettingRecord extends DataClass
       map['last_backup_at'] = Variable<int>(lastBackupAt);
     }
     map['backup_reminder_days'] = Variable<int>(backupReminderDays);
+    map['daily_reminder_enabled'] = Variable<bool>(dailyReminderEnabled);
+    map['daily_reminder_hour'] = Variable<int>(dailyReminderHour);
+    map['daily_reminder_minute'] = Variable<int>(dailyReminderMinute);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
   }
@@ -2699,6 +2791,9 @@ class AppSettingRecord extends DataClass
           ? const Value.absent()
           : Value(lastBackupAt),
       backupReminderDays: Value(backupReminderDays),
+      dailyReminderEnabled: Value(dailyReminderEnabled),
+      dailyReminderHour: Value(dailyReminderHour),
+      dailyReminderMinute: Value(dailyReminderMinute),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2721,6 +2816,13 @@ class AppSettingRecord extends DataClass
       autoLockMinutes: serializer.fromJson<int>(json['autoLockMinutes']),
       lastBackupAt: serializer.fromJson<int?>(json['lastBackupAt']),
       backupReminderDays: serializer.fromJson<int>(json['backupReminderDays']),
+      dailyReminderEnabled: serializer.fromJson<bool>(
+        json['dailyReminderEnabled'],
+      ),
+      dailyReminderHour: serializer.fromJson<int>(json['dailyReminderHour']),
+      dailyReminderMinute: serializer.fromJson<int>(
+        json['dailyReminderMinute'],
+      ),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
   }
@@ -2738,6 +2840,9 @@ class AppSettingRecord extends DataClass
       'autoLockMinutes': serializer.toJson<int>(autoLockMinutes),
       'lastBackupAt': serializer.toJson<int?>(lastBackupAt),
       'backupReminderDays': serializer.toJson<int>(backupReminderDays),
+      'dailyReminderEnabled': serializer.toJson<bool>(dailyReminderEnabled),
+      'dailyReminderHour': serializer.toJson<int>(dailyReminderHour),
+      'dailyReminderMinute': serializer.toJson<int>(dailyReminderMinute),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
   }
@@ -2753,6 +2858,9 @@ class AppSettingRecord extends DataClass
     int? autoLockMinutes,
     Value<int?> lastBackupAt = const Value.absent(),
     int? backupReminderDays,
+    bool? dailyReminderEnabled,
+    int? dailyReminderHour,
+    int? dailyReminderMinute,
     int? updatedAt,
   }) => AppSettingRecord(
     singletonId: singletonId ?? this.singletonId,
@@ -2765,6 +2873,9 @@ class AppSettingRecord extends DataClass
     autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
     lastBackupAt: lastBackupAt.present ? lastBackupAt.value : this.lastBackupAt,
     backupReminderDays: backupReminderDays ?? this.backupReminderDays,
+    dailyReminderEnabled: dailyReminderEnabled ?? this.dailyReminderEnabled,
+    dailyReminderHour: dailyReminderHour ?? this.dailyReminderHour,
+    dailyReminderMinute: dailyReminderMinute ?? this.dailyReminderMinute,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   AppSettingRecord copyWithCompanion(AppSettingRecordsCompanion data) {
@@ -2795,6 +2906,15 @@ class AppSettingRecord extends DataClass
       backupReminderDays: data.backupReminderDays.present
           ? data.backupReminderDays.value
           : this.backupReminderDays,
+      dailyReminderEnabled: data.dailyReminderEnabled.present
+          ? data.dailyReminderEnabled.value
+          : this.dailyReminderEnabled,
+      dailyReminderHour: data.dailyReminderHour.present
+          ? data.dailyReminderHour.value
+          : this.dailyReminderHour,
+      dailyReminderMinute: data.dailyReminderMinute.present
+          ? data.dailyReminderMinute.value
+          : this.dailyReminderMinute,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -2812,6 +2932,9 @@ class AppSettingRecord extends DataClass
           ..write('autoLockMinutes: $autoLockMinutes, ')
           ..write('lastBackupAt: $lastBackupAt, ')
           ..write('backupReminderDays: $backupReminderDays, ')
+          ..write('dailyReminderEnabled: $dailyReminderEnabled, ')
+          ..write('dailyReminderHour: $dailyReminderHour, ')
+          ..write('dailyReminderMinute: $dailyReminderMinute, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -2829,6 +2952,9 @@ class AppSettingRecord extends DataClass
     autoLockMinutes,
     lastBackupAt,
     backupReminderDays,
+    dailyReminderEnabled,
+    dailyReminderHour,
+    dailyReminderMinute,
     updatedAt,
   );
   @override
@@ -2845,6 +2971,9 @@ class AppSettingRecord extends DataClass
           other.autoLockMinutes == this.autoLockMinutes &&
           other.lastBackupAt == this.lastBackupAt &&
           other.backupReminderDays == this.backupReminderDays &&
+          other.dailyReminderEnabled == this.dailyReminderEnabled &&
+          other.dailyReminderHour == this.dailyReminderHour &&
+          other.dailyReminderMinute == this.dailyReminderMinute &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -2859,6 +2988,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
   final Value<int> autoLockMinutes;
   final Value<int?> lastBackupAt;
   final Value<int> backupReminderDays;
+  final Value<bool> dailyReminderEnabled;
+  final Value<int> dailyReminderHour;
+  final Value<int> dailyReminderMinute;
   final Value<int> updatedAt;
   const AppSettingRecordsCompanion({
     this.singletonId = const Value.absent(),
@@ -2871,6 +3003,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     this.autoLockMinutes = const Value.absent(),
     this.lastBackupAt = const Value.absent(),
     this.backupReminderDays = const Value.absent(),
+    this.dailyReminderEnabled = const Value.absent(),
+    this.dailyReminderHour = const Value.absent(),
+    this.dailyReminderMinute = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
   AppSettingRecordsCompanion.insert({
@@ -2884,6 +3019,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     this.autoLockMinutes = const Value.absent(),
     this.lastBackupAt = const Value.absent(),
     this.backupReminderDays = const Value.absent(),
+    this.dailyReminderEnabled = const Value.absent(),
+    this.dailyReminderHour = const Value.absent(),
+    this.dailyReminderMinute = const Value.absent(),
     required int updatedAt,
   }) : salaryDay = Value(salaryDay),
        onboardingCompleted = Value(onboardingCompleted),
@@ -2899,6 +3037,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     Expression<int>? autoLockMinutes,
     Expression<int>? lastBackupAt,
     Expression<int>? backupReminderDays,
+    Expression<bool>? dailyReminderEnabled,
+    Expression<int>? dailyReminderHour,
+    Expression<int>? dailyReminderMinute,
     Expression<int>? updatedAt,
   }) {
     return RawValuesInsertable({
@@ -2914,6 +3055,11 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
       if (lastBackupAt != null) 'last_backup_at': lastBackupAt,
       if (backupReminderDays != null)
         'backup_reminder_days': backupReminderDays,
+      if (dailyReminderEnabled != null)
+        'daily_reminder_enabled': dailyReminderEnabled,
+      if (dailyReminderHour != null) 'daily_reminder_hour': dailyReminderHour,
+      if (dailyReminderMinute != null)
+        'daily_reminder_minute': dailyReminderMinute,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
@@ -2929,6 +3075,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     Value<int>? autoLockMinutes,
     Value<int?>? lastBackupAt,
     Value<int>? backupReminderDays,
+    Value<bool>? dailyReminderEnabled,
+    Value<int>? dailyReminderHour,
+    Value<int>? dailyReminderMinute,
     Value<int>? updatedAt,
   }) {
     return AppSettingRecordsCompanion(
@@ -2942,6 +3091,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
       lastBackupAt: lastBackupAt ?? this.lastBackupAt,
       backupReminderDays: backupReminderDays ?? this.backupReminderDays,
+      dailyReminderEnabled: dailyReminderEnabled ?? this.dailyReminderEnabled,
+      dailyReminderHour: dailyReminderHour ?? this.dailyReminderHour,
+      dailyReminderMinute: dailyReminderMinute ?? this.dailyReminderMinute,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -2979,6 +3131,17 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
     if (backupReminderDays.present) {
       map['backup_reminder_days'] = Variable<int>(backupReminderDays.value);
     }
+    if (dailyReminderEnabled.present) {
+      map['daily_reminder_enabled'] = Variable<bool>(
+        dailyReminderEnabled.value,
+      );
+    }
+    if (dailyReminderHour.present) {
+      map['daily_reminder_hour'] = Variable<int>(dailyReminderHour.value);
+    }
+    if (dailyReminderMinute.present) {
+      map['daily_reminder_minute'] = Variable<int>(dailyReminderMinute.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(updatedAt.value);
     }
@@ -2998,6 +3161,9 @@ class AppSettingRecordsCompanion extends UpdateCompanion<AppSettingRecord> {
           ..write('autoLockMinutes: $autoLockMinutes, ')
           ..write('lastBackupAt: $lastBackupAt, ')
           ..write('backupReminderDays: $backupReminderDays, ')
+          ..write('dailyReminderEnabled: $dailyReminderEnabled, ')
+          ..write('dailyReminderHour: $dailyReminderHour, ')
+          ..write('dailyReminderMinute: $dailyReminderMinute, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();

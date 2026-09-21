@@ -132,6 +132,14 @@ class AppSettingRecords extends Table {
   IntColumn get backupReminderDays => integer().customConstraint(
     'NOT NULL DEFAULT 7 CHECK (backup_reminder_days BETWEEN 1 AND 365)',
   )();
+  BoolColumn get dailyReminderEnabled =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get dailyReminderHour => integer().customConstraint(
+    'NOT NULL DEFAULT 21 CHECK (daily_reminder_hour BETWEEN 0 AND 23)',
+  )();
+  IntColumn get dailyReminderMinute => integer().customConstraint(
+    'NOT NULL DEFAULT 0 CHECK (daily_reminder_minute BETWEEN 0 AND 59)',
+  )();
   IntColumn get updatedAt => integer()();
 
   @override
@@ -175,7 +183,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -259,6 +267,26 @@ class AppDatabase extends _$AppDatabase {
               colorKey: Value(category.colorKey),
               showOnHome: const Value(true),
             ),
+          );
+        }
+      }
+      if (from < 4) {
+        if (!await _columnExists('app_settings', 'daily_reminder_enabled')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.dailyReminderEnabled,
+          );
+        }
+        if (!await _columnExists('app_settings', 'daily_reminder_hour')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.dailyReminderHour,
+          );
+        }
+        if (!await _columnExists('app_settings', 'daily_reminder_minute')) {
+          await migrator.addColumn(
+            appSettingRecords,
+            appSettingRecords.dailyReminderMinute,
           );
         }
       }
