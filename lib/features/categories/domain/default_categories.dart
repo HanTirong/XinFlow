@@ -9,6 +9,7 @@ abstract final class DefaultCategoryIds {
   static const digital = 'builtin.expense.digital';
   static const saving = 'builtin.saving';
   static const investment = 'builtin.investment';
+  static const travel = 'builtin.expense.travel';
   static const other = 'builtin.expense.other';
 }
 
@@ -90,6 +91,15 @@ abstract final class DefaultCategories {
       showOnHome: true,
     ),
     Category(
+      id: DefaultCategoryIds.travel,
+      name: '旅行',
+      flowType: FlowType.expense,
+      iconKey: 'flight_takeoff',
+      colorKey: 'indigo',
+      sortOrder: 75,
+      isSystem: true,
+    ),
+    Category(
       id: DefaultCategoryIds.other,
       name: '其他',
       flowType: FlowType.expense,
@@ -139,6 +149,16 @@ abstract final class DefaultCategories {
       names: const ['基金', '股票', '其他理财'],
       flowType: FlowType.investment,
     ),
+    ..._expenseChildren(DefaultCategoryIds.travel, 'travel', const [
+      '酒店住宿',
+      '机票／火车票',
+      '当地交通',
+      '景点门票',
+      '旅行餐饮',
+      '签证／保险',
+      '旅行购物',
+      '其他旅行支出',
+    ]),
     ..._expenseChildren(DefaultCategoryIds.other, 'other', const [
       '医疗',
       '教育',

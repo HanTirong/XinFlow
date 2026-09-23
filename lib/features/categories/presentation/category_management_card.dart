@@ -14,6 +14,7 @@ const _iconChoices = <String, IconData>{
   'laptop': Icons.laptop_mac_rounded,
   'savings': Icons.savings_rounded,
   'bar_chart': Icons.bar_chart_rounded,
+  'flight_takeoff': Icons.flight_takeoff_rounded,
   'medical': Icons.medical_services_rounded,
   'school': Icons.school_rounded,
   'pets': Icons.pets_rounded,
@@ -30,6 +31,7 @@ const _colorChoices = <String, Color>{
   'purple': Color(0xFF7453C8),
   'amber': Color(0xFFB77A0A),
   'cyan': Color(0xFF15869B),
+  'indigo': Color(0xFF5B5BD6),
 };
 
 Future<void> showCategoryManagementSheet(BuildContext context) =>

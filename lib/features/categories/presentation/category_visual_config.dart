@@ -111,6 +111,15 @@ abstract final class CategoryVisuals {
       backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.investment,
     ),
+    DefaultCategoryIds.travel: CategoryVisualConfig(
+      id: DefaultCategoryIds.travel,
+      name: '旅行',
+      icon: Icons.flight_takeoff_rounded,
+      iconColor: Color(0xFF5B5BD6),
+      darkIconColor: Color(0xFF9696FF),
+      backgroundColor: AppPalette.lightSecondaryCard,
+      type: FlowType.expense,
+    ),
     DefaultCategoryIds.other: CategoryVisualConfig(
       id: DefaultCategoryIds.other,
       name: '其他',
@@ -174,6 +183,7 @@ abstract final class CategoryVisuals {
     'laptop' || 'digital' => Icons.laptop_mac_rounded,
     'savings' || 'saving' => Icons.savings_rounded,
     'bar_chart' || 'investment' => Icons.bar_chart_rounded,
+    'flight_takeoff' || 'travel' => Icons.flight_takeoff_rounded,
     'more_horiz' || 'other' => Icons.more_horiz_rounded,
     'medical' => Icons.medical_services_rounded,
     'school' => Icons.school_rounded,
@@ -219,6 +229,11 @@ abstract final class CategoryVisuals {
     'cyan' => (
       const Color(0xFF15869B),
       const Color(0xFF48CADC),
+      AppPalette.lightSecondaryCard,
+    ),
+    'indigo' => (
+      const Color(0xFF5B5BD6),
+      const Color(0xFF9696FF),
       AppPalette.lightSecondaryCard,
     ),
     _ => _fallbackColors(fallbackType),

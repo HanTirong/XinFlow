@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/date/payday_calculator.dart';
+import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
 
 part 'app_database.g.dart';
@@ -183,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -290,6 +291,7 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 5) await _seedTravelCategories();
     },
   );
 
@@ -377,6 +379,77 @@ class AppDatabase extends _$AppDatabase {
           ),
       ]);
     });
+  }
+
+  Future<void> _seedTravelCategories() async {
+    final travel = DefaultCategories.values.singleWhere(
+      (category) => category.id == DefaultCategoryIds.travel,
+    );
+    final existingById = await (select(
+      categoryRecords,
+    )..where((row) => row.id.equals(travel.id))).getSingleOrNull();
+
+    var parentId = travel.id;
+    if (existingById == null) {
+      final existingByName = await (select(categoryRecords)..where(
+            (row) =>
+                row.parentId.isNull() &
+                row.name.equals(travel.name) &
+                row.deletedAt.isNull(),
+          ))
+          .getSingleOrNull();
+      if (existingByName != null && existingByName.flowType == 'expense') {
+        parentId = existingByName.id;
+      } else {
+        await _insertDefaultCategory(
+          travel,
+          name: existingByName == null ? travel.name : '旅行支出',
+        );
+      }
+    }
+
+    for (final child in DefaultCategories.values.where(
+      (category) => category.parentId == DefaultCategoryIds.travel,
+    )) {
+      final childById = await (select(
+        categoryRecords,
+      )..where((row) => row.id.equals(child.id))).getSingleOrNull();
+      if (childById != null) continue;
+      final childByName = await (select(categoryRecords)..where(
+            (row) =>
+                row.parentId.equals(parentId) &
+                row.name.equals(child.name) &
+                row.deletedAt.isNull(),
+          ))
+          .getSingleOrNull();
+      if (childByName == null) {
+        await _insertDefaultCategory(child, parentId: parentId);
+      }
+    }
+  }
+
+  Future<void> _insertDefaultCategory(
+    Category category, {
+    String? parentId,
+    String? name,
+  }) async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await into(categoryRecords).insert(
+      CategoryRecordsCompanion.insert(
+        id: category.id,
+        parentId: Value(parentId ?? category.parentId),
+        name: name ?? category.name,
+        flowType: category.flowType.name,
+        iconKey: category.iconKey,
+        colorKey: Value(category.colorKey),
+        sortOrder: category.sortOrder,
+        showOnHome: Value(category.showOnHome),
+        isSystem: category.isSystem,
+        isActive: Value(category.isActive),
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
   }
 
   Future<void> clearUserData() => transaction(() async {

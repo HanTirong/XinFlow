@@ -7,7 +7,7 @@ import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
 void main() {
   test('built-in categories have one complete shared visual configuration', () {
-    expect(CategoryVisuals.builtIn, hasLength(8));
+    expect(CategoryVisuals.builtIn, hasLength(9));
 
     final food = CategoryVisuals.resolve(categoryId: DefaultCategoryIds.food);
     final shopping = CategoryVisuals.resolve(
@@ -24,6 +24,12 @@ void main() {
     expect(food.darkIconColor, const Color(0xFFFF8464));
     expect(shopping.darkIconColor, const Color(0xFFFF5C9F));
     expect(food.backgroundColor, shopping.backgroundColor);
+    final travel = CategoryVisuals.resolve(
+      categoryId: DefaultCategoryIds.travel,
+    );
+    expect(travel.name, '旅行');
+    expect(travel.icon, Icons.flight_takeoff_rounded);
+    expect(travel.iconColor, const Color(0xFF5B5BD6));
   });
 
   test('renamed and custom categories keep using the central resolver', () {

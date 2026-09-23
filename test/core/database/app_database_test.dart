@@ -229,6 +229,61 @@ void main() {
     expect(updated.dailyReminderMinute, 45);
   });
 
+  test('version 4 data gains the travel category without loss', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'xinflow_v4_to_v5_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/xinflow.sqlite');
+    final original = AppDatabase.forTesting(NativeDatabase(file));
+    await CompleteOnboarding(
+      repository: DriftOnboardingRepository(original),
+      clock: _FixedClock(DateTime(2026, 9, 23, 9)),
+      idGenerator: const _FixedIdGenerator('cycle-v4'),
+    ).execute(salaryDay: 10, salaryCents: 1300000);
+    await (original.delete(original.categoryRecords)..where(
+          (row) => row.parentId.equals(DefaultCategoryIds.travel),
+        ))
+        .go();
+    await (original.delete(original.categoryRecords)..where(
+          (row) => row.id.equals(DefaultCategoryIds.travel),
+        ))
+        .go();
+    await original.close();
+
+    final raw = sqlite.sqlite3.open(file.path);
+    raw.execute('PRAGMA user_version = 4');
+    raw.close();
+
+    final upgraded = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final categories = await DriftCategoryRepository(upgraded).listActive();
+    final travel = categories.singleWhere(
+      (category) => category.id == DefaultCategoryIds.travel,
+    );
+    final travelChildren = categories
+        .where((category) => category.parentId == travel.id)
+        .map((category) => category.name)
+        .toList();
+
+    expect(travel.name, '旅行');
+    expect(travel.showOnHome, isFalse);
+    expect(travelChildren, [
+      '酒店住宿',
+      '机票／火车票',
+      '当地交通',
+      '景点门票',
+      '旅行餐饮',
+      '签证／保险',
+      '旅行购物',
+      '其他旅行支出',
+    ]);
+    expect(
+      await upgraded.select(upgraded.salaryCycleRecords).get(),
+      hasLength(1),
+    );
+  });
+
   test(
     'completes onboarding atomically and persists one active cycle',
     () async {

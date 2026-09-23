@@ -19,12 +19,36 @@ void main() {
     },
   );
 
-  test('contains the eight agreed top-level categories', () {
+  test('contains the nine agreed top-level categories', () {
     final names = DefaultCategories.values
         .where((category) => category.isTopLevel)
         .map((category) => category.name)
         .toList();
 
-    expect(names, ['饮食', '购物', '住房', '交通', '数字服务', '存款', '理财', '其他']);
+    expect(names, [
+      '饮食',
+      '购物',
+      '住房',
+      '交通',
+      '数字服务',
+      '存款',
+      '理财',
+      '旅行',
+      '其他',
+    ]);
+    final travelChildren = DefaultCategories.values
+        .where((category) => category.parentId == DefaultCategoryIds.travel)
+        .map((category) => category.name)
+        .toList();
+    expect(travelChildren, [
+      '酒店住宿',
+      '机票／火车票',
+      '当地交通',
+      '景点门票',
+      '旅行餐饮',
+      '签证／保险',
+      '旅行购物',
+      '其他旅行支出',
+    ]);
   });
 }
