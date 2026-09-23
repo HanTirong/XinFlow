@@ -184,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -292,6 +292,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 5) await _seedTravelCategories();
+      if (from < 6) await _seedFixedExpenseCategory();
     },
   );
 
@@ -426,6 +427,30 @@ class AppDatabase extends _$AppDatabase {
         await _insertDefaultCategory(child, parentId: parentId);
       }
     }
+  }
+
+  Future<void> _seedFixedExpenseCategory() async {
+    final fixedExpense = DefaultCategories.values.singleWhere(
+      (category) => category.id == DefaultCategoryIds.fixedExpense,
+    );
+    final existingById = await (select(
+      categoryRecords,
+    )..where((row) => row.id.equals(fixedExpense.id))).getSingleOrNull();
+    if (existingById != null) return;
+
+    final existingByName = await (select(categoryRecords)..where(
+          (row) =>
+              row.parentId.isNull() &
+              row.name.equals(fixedExpense.name) &
+              row.deletedAt.isNull(),
+        ))
+        .getSingleOrNull();
+    if (existingByName != null && existingByName.flowType == 'expense') return;
+
+    await _insertDefaultCategory(
+      fixedExpense,
+      name: existingByName == null ? fixedExpense.name : '固定支出',
+    );
   }
 
   Future<void> _insertDefaultCategory(

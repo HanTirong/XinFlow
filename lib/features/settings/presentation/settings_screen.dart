@@ -139,7 +139,7 @@ final class SettingsScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
               title: Text('薪流 0.1.0'),
-              subtitle: Text('数据库版本 5 · 备份格式版本 2'),
+              subtitle: Text('数据库版本 6 · 备份格式版本 2'),
             ),
           ),
         ],

@@ -19,7 +19,7 @@ void main() {
     },
   );
 
-  test('contains the nine agreed top-level categories', () {
+  test('contains the ten agreed top-level categories', () {
     final names = DefaultCategories.values
         .where((category) => category.isTopLevel)
         .map((category) => category.name)
@@ -34,6 +34,7 @@ void main() {
       '存款',
       '理财',
       '旅行',
+      '固定开支',
       '其他',
     ]);
     final travelChildren = DefaultCategories.values
@@ -50,5 +51,15 @@ void main() {
       '旅行购物',
       '其他旅行支出',
     ]);
+    final fixedExpense = DefaultCategories.values.singleWhere(
+      (category) => category.id == DefaultCategoryIds.fixedExpense,
+    );
+    expect(fixedExpense.showOnHome, isFalse);
+    expect(
+      DefaultCategories.values.where(
+        (category) => category.parentId == DefaultCategoryIds.fixedExpense,
+      ),
+      isEmpty,
+    );
   });
 }

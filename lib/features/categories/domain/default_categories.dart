@@ -10,6 +10,7 @@ abstract final class DefaultCategoryIds {
   static const saving = 'builtin.saving';
   static const investment = 'builtin.investment';
   static const travel = 'builtin.expense.travel';
+  static const fixedExpense = 'builtin.expense.fixed';
   static const other = 'builtin.expense.other';
 }
 
@@ -97,6 +98,15 @@ abstract final class DefaultCategories {
       iconKey: 'flight_takeoff',
       colorKey: 'indigo',
       sortOrder: 75,
+      isSystem: true,
+    ),
+    Category(
+      id: DefaultCategoryIds.fixedExpense,
+      name: '固定开支',
+      flowType: FlowType.expense,
+      iconKey: 'calendar_month',
+      colorKey: 'orange',
+      sortOrder: 77,
       isSystem: true,
     ),
     Category(

@@ -120,6 +120,15 @@ abstract final class CategoryVisuals {
       backgroundColor: AppPalette.lightSecondaryCard,
       type: FlowType.expense,
     ),
+    DefaultCategoryIds.fixedExpense: CategoryVisualConfig(
+      id: DefaultCategoryIds.fixedExpense,
+      name: '固定开支',
+      icon: Icons.calendar_month_rounded,
+      iconColor: Color(0xFFC46617),
+      darkIconColor: Color(0xFFFFA65C),
+      backgroundColor: AppPalette.lightSecondaryCard,
+      type: FlowType.expense,
+    ),
     DefaultCategoryIds.other: CategoryVisualConfig(
       id: DefaultCategoryIds.other,
       name: '其他',
@@ -184,6 +193,7 @@ abstract final class CategoryVisuals {
     'savings' || 'saving' => Icons.savings_rounded,
     'bar_chart' || 'investment' => Icons.bar_chart_rounded,
     'flight_takeoff' || 'travel' => Icons.flight_takeoff_rounded,
+    'calendar_month' || 'fixed' => Icons.calendar_month_rounded,
     'more_horiz' || 'other' => Icons.more_horiz_rounded,
     'medical' => Icons.medical_services_rounded,
     'school' => Icons.school_rounded,
@@ -234,6 +244,11 @@ abstract final class CategoryVisuals {
     'indigo' => (
       const Color(0xFF5B5BD6),
       const Color(0xFF9696FF),
+      AppPalette.lightSecondaryCard,
+    ),
+    'orange' => (
+      const Color(0xFFC46617),
+      const Color(0xFFFFA65C),
       AppPalette.lightSecondaryCard,
     ),
     _ => _fallbackColors(fallbackType),
