@@ -32,6 +32,9 @@ final class LocalDate implements Comparable<LocalDate> {
 
   DateTime get asUtc => DateTime.utc(year, month, day);
 
+  LocalDate get previousDay =>
+      LocalDate.fromDateTime(asUtc.subtract(const Duration(days: 1)));
+
   int daysUntil(LocalDate other) => other.asUtc.difference(asUtc).inDays;
 
   @override

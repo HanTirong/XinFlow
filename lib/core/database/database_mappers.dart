@@ -10,6 +10,7 @@ extension SalaryCycleRecordMapper on SalaryCycleRecord {
     id: id,
     salaryCents: salaryCents,
     carryoverCents: carryoverCents,
+    salaryPending: salaryPending,
     startedAt: DateTime.fromMillisecondsSinceEpoch(startedAt),
     expectedPayDate: LocalDate.parse(expectedPayDate),
     status: SalaryCycleStatus.values.byName(status),

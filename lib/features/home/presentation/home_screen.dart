@@ -122,7 +122,10 @@ final class HomeScreen extends StatelessWidget {
 
   List<String> get _reminders {
     final messages = <String>[];
-    if (snapshot.daysUntilPayday <= 3) {
+    if (snapshot.cycleStartsInFuture) {
+      messages.add('当前周期开始日期晚于今天。请到“我的 → 本地数据管理”检查是否需要撤销误切换。');
+    }
+    if (snapshot.daysUntilPayday <= 3 && !snapshot.cycle.salaryPending) {
       messages.add('距离预计发薪日还有 ${snapshot.daysUntilPayday} 天。');
     }
     if (backupReminderDue) {
@@ -196,7 +199,7 @@ final class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = snapshot.cycle.startedAt;
-    final expected = snapshot.cycle.expectedPayDate;
+    final expected = snapshot.cycle.expectedPayDate.previousDay;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Row(
@@ -309,7 +312,11 @@ final class _SalaryCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isDeficit ? '本期工资已超出' : '本期工资剩余',
+                      snapshot.cycle.salaryPending
+                          ? '本期工资待填写'
+                          : isDeficit
+                          ? '本期工资已超出'
+                          : '本期工资剩余',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -317,7 +324,9 @@ final class _SalaryCard extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        _privateMoney(context, summary.remainingCents),
+                        snapshot.cycle.salaryPending
+                            ? '待填写'
+                            : _privateMoney(context, summary.remainingCents),
                         style: Theme.of(context).textTheme.headlineLarge
                             ?.copyWith(
                               color: isDeficit ? colors.error : colors.primary,
@@ -358,40 +367,61 @@ final class _SalaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: colors.surfaceContainerHighest,
-              color: isDeficit ? colors.error : colors.primary,
+          if (snapshot.cycle.salaryPending) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onSalaryReceived,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('填写本期工资'),
             ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _Metric(
-                  label: '本期工资',
-                  value: _privateMoney(context, summary.salaryCents),
-                ),
+            const SizedBox(height: 8),
+            Text(
+              '本期支出已记录；填写到账工资后显示可用余额。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ] else ...[
+            const SizedBox(height: 18),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: colors.surfaceContainerHighest,
+                color: isDeficit ? colors.error : colors.primary,
               ),
-              Expanded(
-                child: _Metric(
-                  label: '已记录',
-                  value: _privateMoney(context, summary.allocatedCents),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _Metric(
+                    label: '本期工资',
+                    value: _privateMoney(context, summary.salaryCents),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _Metric(
-                  label: '剩余比例',
-                  value: '${(progress * 100).round()}%',
+                Expanded(
+                  child: _Metric(
+                    label: '已记录',
+                    value: _privateMoney(context, summary.allocatedCents),
+                  ),
                 ),
+                Expanded(
+                  child: _Metric(
+                    label: '剩余比例',
+                    value: '${(progress * 100).round()}%',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: onSalaryReceived,
+                child: const Text('修改本期工资'),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
+            ),
+          ],
           const Divider(height: 1),
           const SizedBox(height: 14),
           Row(

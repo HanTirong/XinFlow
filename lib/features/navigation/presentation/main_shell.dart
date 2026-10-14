@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xinflow/app/providers.dart';
+import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/budgets/domain/budget_calculator.dart';
 import 'package:xinflow/features/categories/presentation/category_management_card.dart';
@@ -8,7 +9,7 @@ import 'package:xinflow/features/home/domain/home_snapshot.dart';
 import 'package:xinflow/features/home/presentation/home_screen.dart';
 import 'package:xinflow/features/reports/presentation/report_screen.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
-import 'package:xinflow/features/salary_cycles/presentation/cycle_settlement_sheet.dart';
+import 'package:xinflow/features/salary_cycles/presentation/salary_entry_sheet.dart';
 import 'package:xinflow/features/settings/presentation/settings_screen.dart';
 import 'package:xinflow/features/transactions/presentation/add_allocation_sheet.dart';
 import 'package:xinflow/features/transactions/presentation/add_refund_sheet.dart';
@@ -26,6 +27,7 @@ final class MainShell extends ConsumerStatefulWidget {
 final class _MainShellState extends ConsumerState<MainShell> {
   int _selectedIndex = 0;
   bool _amountsRevealed = false;
+  final Set<String> _promptedSalaryCycles = {};
 
   @override
   void initState() {
@@ -33,13 +35,22 @@ final class _MainShellState extends ConsumerState<MainShell> {
     DailyReminderNotifications.instance.openRequests.addListener(
       _openFromReminder,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openFromReminder());
+    DailyReminderNotifications.instance.salaryOpenRequests.addListener(
+      _openFromSalaryReminder,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _openFromReminder();
+      _openFromSalaryReminder();
+    });
   }
 
   @override
   void dispose() {
     DailyReminderNotifications.instance.openRequests.removeListener(
       _openFromReminder,
+    );
+    DailyReminderNotifications.instance.salaryOpenRequests.removeListener(
+      _openFromSalaryReminder,
     );
     super.dispose();
   }
@@ -52,6 +63,14 @@ final class _MainShellState extends ConsumerState<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openAddAllocation();
     });
+  }
+
+  void _openFromSalaryReminder() {
+    if (!mounted ||
+        !DailyReminderNotifications.instance.takePendingSalaryOpen()) {
+      return;
+    }
+    setState(() => _selectedIndex = 0);
   }
 
   @override
@@ -70,6 +89,12 @@ final class _MainShellState extends ConsumerState<MainShell> {
           onRetry: () => ref.invalidate(homeSnapshotProvider),
         ),
         data: (snapshot) {
+          if (snapshot.cycle.salaryPending &&
+              _promptedSalaryCycles.add(snapshot.cycle.id)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _openSalaryEntry(snapshot.cycle);
+            });
+          }
           final budgets =
               ref.watch(cycleBudgetsProvider(snapshot.cycle.id)).value ??
               const [];
@@ -79,7 +104,7 @@ final class _MainShellState extends ConsumerState<MainShell> {
           return HomeScreen(
             snapshot: snapshot,
             onAddAllocation: _openAddAllocation,
-            onSalaryReceived: () => _openCycleSettlement(snapshot),
+            onSalaryReceived: () => _openSalaryEntry(snapshot.cycle),
             onBrowseCycles: () => _selectPage(1),
             onEditCategories: () => showCategoryManagementSheet(context),
             onViewAllTransactions: () => _selectPage(1),
@@ -164,6 +189,41 @@ final class _MainShellState extends ConsumerState<MainShell> {
     TransactionEntry? entry,
     SalaryCycle? historicalCycle,
   }) async {
+    if (historicalCycle == null) {
+      try {
+        final switched = await ref.read(autoSettleDueCyclesProvider).execute();
+        if (switched > 0) {
+          ref
+            ..invalidate(homeSnapshotProvider)
+            ..invalidate(salaryCyclesProvider)
+            ..invalidate(pendingSalaryCyclesProvider);
+          return;
+        }
+        final active = await ref
+            .read(salaryCycleRepositoryProvider)
+            .getActiveCycle();
+        if (active != null &&
+            LocalDate.fromDateTime(active.startedAt).compareTo(
+                  LocalDate.fromDateTime(ref.read(clockProvider).now()),
+                ) >
+                0) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('当前周期日期晚于今天，请先撤销误切换。')),
+            );
+          }
+          return;
+        }
+      } on Object catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('无法检查工资周期：$error')));
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
     final result = await showModalBottomSheet<AllocationEditorResult>(
       context: context,
       isScrollControlled: true,
@@ -240,28 +300,26 @@ final class _MainShellState extends ConsumerState<MainShell> {
     }
   }
 
-  Future<void> _openCycleSettlement(HomeSnapshot snapshot) async {
-    final bootstrap = await ref.read(startupProvider.future);
-    if (!mounted || bootstrap.settings == null) return;
-    final switched = await showModalBottomSheet<bool>(
+  Future<void> _openSalaryEntry(SalaryCycle cycle) async {
+    if (!mounted) return;
+    final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: false,
-      builder: (context) => CycleSettlementSheet(
-        snapshot: snapshot,
-        salaryDay: bootstrap.settings!.salaryDay,
-      ),
+      builder: (context) => SalaryEntrySheet(cycle: cycle),
     );
-    if (switched == true && mounted) {
+    if (saved == true && mounted) {
       ref
         ..invalidate(homeSnapshotProvider)
         ..invalidate(currentCycleTransactionsProvider)
         ..invalidate(salaryCyclesProvider)
+        ..invalidate(pendingSalaryCyclesProvider)
+        ..invalidate(cycleReportProvider)
         ..invalidate(crossCycleReportProvider);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('新工资周期已开始。')));
+        ..showSnackBar(const SnackBar(content: Text('工资金额已保存。')));
     }
   }
 }

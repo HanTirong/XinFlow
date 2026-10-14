@@ -8,6 +8,7 @@ import 'package:xinflow/core/clock/clock.dart';
 import 'package:xinflow/core/database/app_database.dart';
 import 'package:xinflow/core/id/id_generator.dart';
 import 'package:xinflow/core/date/local_date.dart';
+import 'package:xinflow/core/date/payday_calculator.dart';
 import 'package:xinflow/features/categories/data/drift_category_repository.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
@@ -48,7 +49,7 @@ void main() {
   });
 
   test(
-    'version 2 migration aligns an existing cycle to fixed payday',
+    'legacy migration preserves the active cycle and adopts the tenth',
     () async {
       final previousWarningSetting =
           driftRuntimeOptions.dontWarnAboutMultipleDatabases;
@@ -85,18 +86,31 @@ void main() {
         upgraded,
       ).loadBootstrap();
 
-      expect(
-        LocalDate.fromDateTime(bootstrap.activeCycle!.startedAt),
-        const LocalDate(2026, 9, 10),
+      expect(bootstrap.settings!.salaryDay, 10);
+      expect(bootstrap.activeCycle!.expectedPayDate.day, 10);
+      final currentStart = PaydayCalculator.cycleStartOnOrBefore(
+        today: LocalDate.fromDateTime(DateTime.now()),
+        salaryDay: 10,
       );
-      expect(
-        bootstrap.activeCycle!.expectedPayDate,
-        const LocalDate(2026, 10, 10),
-      );
-      expect(
-        await upgraded.select(upgraded.salaryCycleRecords).get(),
-        hasLength(1),
-      );
+      if (currentStart.compareTo(const LocalDate(2026, 9, 10)) > 0) {
+        expect(
+          LocalDate.fromDateTime(bootstrap.activeCycle!.startedAt),
+          currentStart,
+        );
+        final cycles = await upgraded.select(upgraded.salaryCycleRecords).get();
+        expect(cycles.length, greaterThan(1));
+        expect(
+          cycles
+              .singleWhere((cycle) => cycle.id == 'cycle-old')
+              .expectedPayDate,
+          '2026-10-10',
+        );
+      } else {
+        expect(
+          LocalDate.fromDateTime(bootstrap.activeCycle!.startedAt),
+          const LocalDate(2026, 9, 10),
+        );
+      }
     },
   );
 
@@ -218,8 +232,10 @@ void main() {
     expect(loaded.dailyReminderHour, 21);
     expect(loaded.dailyReminderMinute, 0);
     expect(
-      await upgraded.select(upgraded.salaryCycleRecords).get(),
-      hasLength(1),
+      (await upgraded.select(upgraded.salaryCycleRecords).get()).any(
+        (cycle) => cycle.id == 'cycle-v3',
+      ),
+      isTrue,
     );
 
     await settings.updateDailyReminder(enabled: true, hour: 20, minute: 45);
@@ -241,14 +257,12 @@ void main() {
       clock: _FixedClock(DateTime(2026, 9, 23, 9)),
       idGenerator: const _FixedIdGenerator('cycle-v4'),
     ).execute(salaryDay: 10, salaryCents: 1300000);
-    await (original.delete(original.categoryRecords)..where(
-          (row) => row.parentId.equals(DefaultCategoryIds.travel),
-        ))
-        .go();
-    await (original.delete(original.categoryRecords)..where(
-          (row) => row.id.equals(DefaultCategoryIds.travel),
-        ))
-        .go();
+    await (original.delete(
+      original.categoryRecords,
+    )..where((row) => row.parentId.equals(DefaultCategoryIds.travel))).go();
+    await (original.delete(
+      original.categoryRecords,
+    )..where((row) => row.id.equals(DefaultCategoryIds.travel))).go();
     await original.close();
 
     final raw = sqlite.sqlite3.open(file.path);
@@ -279,52 +293,58 @@ void main() {
       '其他旅行支出',
     ]);
     expect(
-      await upgraded.select(upgraded.salaryCycleRecords).get(),
-      hasLength(1),
+      (await upgraded.select(upgraded.salaryCycleRecords).get()).any(
+        (cycle) => cycle.id == 'cycle-v4',
+      ),
+      isTrue,
     );
   });
 
-  test('version 5 data gains the fixed expense category without loss', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'xinflow_v5_to_v6_',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    final file = File('${directory.path}/xinflow.sqlite');
-    final original = AppDatabase.forTesting(NativeDatabase(file));
-    await CompleteOnboarding(
-      repository: DriftOnboardingRepository(original),
-      clock: _FixedClock(DateTime(2026, 9, 23, 9)),
-      idGenerator: const _FixedIdGenerator('cycle-v5'),
-    ).execute(salaryDay: 10, salaryCents: 1300000);
-    await (original.delete(original.categoryRecords)..where(
-          (row) => row.id.equals(DefaultCategoryIds.fixedExpense),
-        ))
-        .go();
-    await original.close();
+  test(
+    'version 5 data gains the fixed expense category without loss',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'xinflow_v5_to_v6_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/xinflow.sqlite');
+      final original = AppDatabase.forTesting(NativeDatabase(file));
+      await CompleteOnboarding(
+        repository: DriftOnboardingRepository(original),
+        clock: _FixedClock(DateTime(2026, 9, 23, 9)),
+        idGenerator: const _FixedIdGenerator('cycle-v5'),
+      ).execute(salaryDay: 10, salaryCents: 1300000);
+      await (original.delete(
+        original.categoryRecords,
+      )..where((row) => row.id.equals(DefaultCategoryIds.fixedExpense))).go();
+      await original.close();
 
-    final raw = sqlite.sqlite3.open(file.path);
-    raw.execute('PRAGMA user_version = 5');
-    raw.close();
+      final raw = sqlite.sqlite3.open(file.path);
+      raw.execute('PRAGMA user_version = 5');
+      raw.close();
 
-    final upgraded = AppDatabase.forTesting(NativeDatabase(file));
-    addTearDown(upgraded.close);
-    final categories = await DriftCategoryRepository(upgraded).listActive();
-    final fixedExpense = categories.singleWhere(
-      (category) => category.id == DefaultCategoryIds.fixedExpense,
-    );
+      final upgraded = AppDatabase.forTesting(NativeDatabase(file));
+      addTearDown(upgraded.close);
+      final categories = await DriftCategoryRepository(upgraded).listActive();
+      final fixedExpense = categories.singleWhere(
+        (category) => category.id == DefaultCategoryIds.fixedExpense,
+      );
 
-    expect(fixedExpense.name, '固定开支');
-    expect(fixedExpense.flowType, FlowType.expense);
-    expect(fixedExpense.showOnHome, isFalse);
-    expect(
-      categories.where((category) => category.parentId == fixedExpense.id),
-      isEmpty,
-    );
-    expect(
-      await upgraded.select(upgraded.salaryCycleRecords).get(),
-      hasLength(1),
-    );
-  });
+      expect(fixedExpense.name, '固定开支');
+      expect(fixedExpense.flowType, FlowType.expense);
+      expect(fixedExpense.showOnHome, isFalse);
+      expect(
+        categories.where((category) => category.parentId == fixedExpense.id),
+        isEmpty,
+      );
+      expect(
+        (await upgraded.select(upgraded.salaryCycleRecords).get()).any(
+          (cycle) => cycle.id == 'cycle-v5',
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test(
     'completes onboarding atomically and persists one active cycle',

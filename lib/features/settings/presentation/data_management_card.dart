@@ -28,6 +28,10 @@ final class DataManagementScreen extends ConsumerWidget {
     final overview = ref.watch(localDataOverviewProvider);
     final cycles =
         ref.watch(salaryCyclesProvider).value ?? const <SalaryCycle>[];
+    final activeCycle = _activeCycle(cycles);
+    final hasPreviousCycle = cycles.any(
+      (item) => item.status == SalaryCycleStatus.closed,
+    );
     final settings = ref.watch(appSettingsProvider).value;
     return Scaffold(
       appBar: AppBar(title: const Text('本地数据管理')),
@@ -87,6 +91,27 @@ final class DataManagementScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 20),
+          Text('当前工资周期', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (activeCycle != null)
+            Card(
+              child: ListTile(
+                title: Text(_cycleRange(activeCycle)),
+                subtitle: Text(
+                  hasPreviousCycle ? '如果误点了工资到账，可以撤销最近一次周期切换' : '首个工资周期不能撤销',
+                ),
+                trailing: IconButton(
+                  tooltip: '撤销最近一次周期切换',
+                  icon: const Icon(Icons.undo_rounded),
+                  onPressed: hasPreviousCycle
+                      ? () => _undoLatestCycle(context, ref)
+                      : null,
+                ),
+              ),
+            )
+          else
+            const Text('正在读取当前周期…'),
+          const SizedBox(height: 20),
           Text('历史周期', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           for (final cycle in cycles.where(
@@ -95,7 +120,7 @@ final class DataManagementScreen extends ConsumerWidget {
             Card(
               child: ListTile(
                 title: Text(
-                  '${cycle.startedAt.year}-${cycle.startedAt.month.toString().padLeft(2, '0')}-${cycle.startedAt.day.toString().padLeft(2, '0')} ～ ${cycle.expectedPayDate}',
+                  '${cycle.startedAt.year}-${cycle.startedAt.month.toString().padLeft(2, '0')}-${cycle.startedAt.day.toString().padLeft(2, '0')} ～ ${cycle.expectedPayDate.previousDay}',
                 ),
                 subtitle: const Text('删除后，该周期的流水与预算将一并永久删除'),
                 trailing: IconButton(
@@ -151,6 +176,73 @@ final class DataManagementScreen extends ConsumerWidget {
       ..invalidate(crossCycleReportProvider);
   }
 
+  Future<void> _undoLatestCycle(BuildContext context, WidgetRef ref) async {
+    try {
+      final service = ref.read(localDataServiceProvider);
+      final preview = await service.previewLatestCycleUndo();
+      if (!context.mounted) return;
+      if (preview == null) {
+        _message(context, '没有可以撤销的工资周期切换。');
+        return;
+      }
+      if (!preview.canUndo) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('暂时无法撤销'),
+            content: Text(
+              '当前周期包含 ${preview.transactionCount} 笔流水和 '
+              '${preview.budgetCount} 项预算。请先清理这些内容，再撤销周期切换。',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('撤销最近一次周期切换？'),
+          content: Text(
+            '将删除当前周期 ${_cycleRange(preview.activeCycle)}，并恢复上一周期 '
+            '${_cycleRange(preview.previousCycle)}。\n\n'
+            '已有历史流水不会丢失。建议操作前先导出备份。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('确认撤销'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+
+      await service.undoLatestCycleTransition();
+      ref
+        ..invalidate(homeSnapshotProvider)
+        ..invalidate(salaryCyclesProvider)
+        ..invalidate(localDataOverviewProvider)
+        ..invalidate(cycleTransactionsProvider)
+        ..invalidate(cycleBudgetsProvider)
+        ..invalidate(cycleReportProvider)
+        ..invalidate(crossCycleReportProvider);
+      if (context.mounted) _message(context, '已撤销最近一次工资周期切换。');
+    } on Object catch (error) {
+      if (context.mounted) _message(context, '撤销失败：$error');
+    }
+  }
+
   Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -176,6 +268,25 @@ final class DataManagementScreen extends ConsumerWidget {
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
+}
+
+SalaryCycle? _activeCycle(Iterable<SalaryCycle> cycles) {
+  for (final cycle in cycles) {
+    if (cycle.status == SalaryCycleStatus.active) return cycle;
+  }
+  return null;
+}
+
+String _cycleRange(SalaryCycle cycle) {
+  final start = cycle.startedAt;
+  return '${start.year}-${start.month.toString().padLeft(2, '0')}-'
+      '${start.day.toString().padLeft(2, '0')} ～ ${cycle.expectedPayDate.previousDay}';
+}
+
+void _message(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
 }
 
 String _formatBytes(int bytes) {

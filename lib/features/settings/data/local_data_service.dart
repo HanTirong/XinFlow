@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:xinflow/core/database/app_database.dart';
+import 'package:xinflow/core/database/database_mappers.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 
 final class LocalDataOverview {
   const LocalDataOverview({
@@ -15,6 +17,22 @@ final class LocalDataOverview {
   final int categories;
   final int budgets;
   final int approximateBytes;
+}
+
+final class CycleUndoPreview {
+  const CycleUndoPreview({
+    required this.activeCycle,
+    required this.previousCycle,
+    required this.transactionCount,
+    required this.budgetCount,
+  });
+
+  final SalaryCycle activeCycle;
+  final SalaryCycle previousCycle;
+  final int transactionCount;
+  final int budgetCount;
+
+  bool get canUndo => transactionCount == 0 && budgetCount == 0;
 }
 
 final class LocalDataService {
@@ -42,6 +60,20 @@ final class LocalDataService {
 
   Future<void> deleteClosedCycle(String cycleId) =>
       _database.deleteClosedCycle(cycleId);
+
+  Future<CycleUndoPreview?> previewLatestCycleUndo() async {
+    final preview = await _database.previewLatestCycleUndo();
+    if (preview == null) return null;
+    return CycleUndoPreview(
+      activeCycle: preview.active.toDomain(),
+      previousCycle: preview.previous.toDomain(),
+      transactionCount: preview.transactionCount,
+      budgetCount: preview.budgetCount,
+    );
+  }
+
+  Future<void> undoLatestCycleTransition() =>
+      _database.undoLatestCycleTransition();
 
   Future<void> clearAll() => _database.clearUserData();
 

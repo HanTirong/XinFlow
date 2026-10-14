@@ -10,6 +10,7 @@ final class SalaryCycle {
     required this.expectedPayDate,
     required this.status,
     this.carryoverCents = 0,
+    this.salaryPending = false,
     this.closedAt,
     this.finalRemainingCents,
   }) {
@@ -18,6 +19,9 @@ final class SalaryCycle {
     }
     if (salaryCents < 0) {
       throw ArgumentError.value(salaryCents, 'salaryCents', '工资不能小于 0。');
+    }
+    if (salaryPending && salaryCents != 0) {
+      throw ArgumentError('待填写工资的周期不能包含已确认的工资金额。');
     }
     if (carryoverCents < 0) {
       throw ArgumentError.value(carryoverCents, 'carryoverCents', '结转不能小于 0。');
@@ -35,6 +39,7 @@ final class SalaryCycle {
   final String id;
   final int salaryCents;
   final int carryoverCents;
+  final bool salaryPending;
   final DateTime startedAt;
   final LocalDate expectedPayDate;
   final SalaryCycleStatus status;
@@ -50,6 +55,7 @@ final class SalaryCycle {
       id: id,
       salaryCents: salaryCents,
       carryoverCents: carryoverCents,
+      salaryPending: salaryPending,
       startedAt: startedAt,
       expectedPayDate: expectedPayDate,
       status: SalaryCycleStatus.closed,

@@ -16,14 +16,12 @@ final class OnboardingScreen extends StatefulWidget {
 
 final class _OnboardingScreenState extends State<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _salaryDayController = TextEditingController(text: '15');
   final _salaryController = TextEditingController();
   bool _isSubmitting = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _salaryDayController.dispose();
     _salaryController.dispose();
     super.dispose();
   }
@@ -40,10 +38,7 @@ final class _OnboardingScreenState extends State<OnboardingScreen> {
 
     try {
       final salary = Money.parse(_salaryController.text);
-      await widget.onSubmit(
-        salaryDay: int.parse(_salaryDayController.text),
-        salaryCents: salary.cents,
-      );
+      await widget.onSubmit(salaryDay: 10, salaryCents: salary.cents);
     } on Object catch (error) {
       if (!mounted) {
         return;
@@ -79,31 +74,20 @@ final class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '这些信息只保存在你的设备中。发薪日仅用于预计日期，不会自动切换工资周期。',
+                    '工资周期固定为每月 10 日至次月 9 日。到达 10 日后，打开应用会自动结算上一周期。',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                       height: 1.5,
                     ),
                   ),
                   const SizedBox(height: 28),
-                  TextFormField(
-                    controller: _salaryDayController,
-                    decoration: const InputDecoration(
-                      labelText: '固定发薪日',
-                      hintText: '1 - 31',
-                      prefixIcon: Icon(Icons.calendar_today_outlined),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    validator: (value) {
-                      final day = int.tryParse(value ?? '');
-                      if (day == null || day < 1 || day > 31) {
-                        return '请输入 1 至 31 之间的日期。';
-                      }
-                      return null;
-                    },
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.calendar_today_outlined),
+                    title: Text('工资周期'),
+                    subtitle: Text('每月 10 日至次月 9 日'),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _salaryController,
                     decoration: const InputDecoration(

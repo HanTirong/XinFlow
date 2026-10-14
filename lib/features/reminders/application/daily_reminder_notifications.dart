@@ -13,15 +13,19 @@ final class DailyReminderNotifications {
 
   static final instance = DailyReminderNotifications._();
   static const _notificationId = 2100;
+  static const _salaryNotificationId = 2101;
   static const _payload = 'daily-expense-reminder';
+  static const _salaryPayload = 'salary-day-reminder';
   static const _timeZoneChannel = MethodChannel('xinflow/local_timezone');
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   final ValueNotifier<int> openRequests = ValueNotifier<int>(0);
+  final ValueNotifier<int> salaryOpenRequests = ValueNotifier<int>(0);
   Future<void> _lastOperation = Future<void>.value();
   bool _initialized = false;
   bool _pendingOpen = false;
+  bool _pendingSalaryOpen = false;
 
   bool get isSupported => defaultTargetPlatform == TargetPlatform.android;
 
@@ -33,6 +37,7 @@ final class DailyReminderNotifications {
       ),
       onDidReceiveNotificationResponse: (response) {
         if (response.payload == _payload) _signalOpen();
+        if (response.payload == _salaryPayload) _signalSalaryOpen();
       },
     );
     final launch = await _plugin.getNotificationAppLaunchDetails();
@@ -40,12 +45,27 @@ final class DailyReminderNotifications {
         launch?.notificationResponse?.payload == _payload) {
       _signalOpen();
     }
+    if (launch?.didNotificationLaunchApp == true &&
+        launch?.notificationResponse?.payload == _salaryPayload) {
+      _signalSalaryOpen();
+    }
     _initialized = true;
   }
 
   void _signalOpen() {
     _pendingOpen = true;
     openRequests.value++;
+  }
+
+  void _signalSalaryOpen() {
+    _pendingSalaryOpen = true;
+    salaryOpenRequests.value++;
+  }
+
+  bool takePendingSalaryOpen() {
+    if (!_pendingSalaryOpen) return false;
+    _pendingSalaryOpen = false;
+    return true;
   }
 
   bool takePendingOpen() {
@@ -89,10 +109,12 @@ final class DailyReminderNotifications {
     await initialize();
     if (settings?.dailyReminderEnabled != true) {
       await _plugin.cancel(id: _notificationId);
+      await _plugin.cancel(id: _salaryNotificationId);
       return;
     }
     if (!await areNotificationsEnabled()) {
       await _plugin.cancel(id: _notificationId);
+      await _plugin.cancel(id: _salaryNotificationId);
       throw StateError('系统通知权限未开启。');
     }
 
@@ -136,6 +158,28 @@ final class DailyReminderNotifications {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
       payload: _payload,
+    );
+    var salaryDay = tz.TZDateTime(tz.local, now.year, now.month, 10, 9);
+    if (!salaryDay.isAfter(now)) {
+      salaryDay = tz.TZDateTime(tz.local, now.year, now.month + 1, 10, 9);
+    }
+    await _plugin.zonedSchedule(
+      id: _salaryNotificationId,
+      title: '新的工资周期已开始',
+      body: '打开薪流查看上期结算，并填写本期到账工资。',
+      scheduledDate: salaryDay,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'salary_cycle_reminder',
+          '工资周期提醒',
+          channelDescription: '每月 10 日提醒填写本期工资',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
+      payload: _salaryPayload,
     );
   }
 }

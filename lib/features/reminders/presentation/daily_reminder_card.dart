@@ -32,7 +32,7 @@ final class _DailyReminderCardState extends ConsumerState<DailyReminderCard> {
               !supported
                   ? '当前仅支持安卓版'
                   : settings?.dailyReminderEnabled == true
-                  ? '每天约 $time 提醒补记当日消费'
+                  ? '每天约 $time 提醒记账；每月 10 日提醒填写工资'
                   : '关闭 · 默认时间 $time',
             ),
             value: settings?.dailyReminderEnabled ?? false,

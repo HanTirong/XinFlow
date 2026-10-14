@@ -21,6 +21,8 @@ import 'package:xinflow/features/salary_cycles/data/drift_salary_cycle_repositor
 import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart';
 import 'package:xinflow/features/salary_cycles/data/drift_closed_cycle_correction_repository.dart';
 import 'package:xinflow/features/salary_cycles/application/close_and_start_next_cycle.dart';
+import 'package:xinflow/features/salary_cycles/application/auto_settle_due_cycles.dart';
+import 'package:xinflow/features/salary_cycles/application/salary_entry_service.dart';
 import 'package:xinflow/features/salary_cycles/application/correct_closed_cycle.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_summary.dart';
@@ -89,6 +91,25 @@ final closeAndStartNextCycleProvider = Provider<CloseAndStartNextCycle>(
   ),
 );
 
+final autoSettleDueCyclesProvider = Provider<AutoSettleDueCycles>(
+  (ref) => AutoSettleDueCycles(
+    database: ref.watch(appDatabaseProvider),
+    clock: ref.watch(clockProvider),
+    idGenerator: ref.watch(idGeneratorProvider),
+  ),
+);
+
+final salaryEntryServiceProvider = Provider<SalaryEntryService>(
+  (ref) => SalaryEntryService(
+    ref.watch(appDatabaseProvider),
+    ref.watch(clockProvider),
+  ),
+);
+
+final pendingSalaryCyclesProvider = FutureProvider<List<SalaryCycle>>(
+  (ref) => ref.watch(salaryEntryServiceProvider).pendingCycles(),
+);
+
 final correctClosedCycleProvider = Provider<CorrectClosedCycle>(
   (ref) => CorrectClosedCycle(
     categories: ref.watch(categoryRepositoryProvider),
@@ -132,7 +153,9 @@ final cycleReportProvider = FutureProvider.family<CycleReport, String>((
   final index = chronological.indexWhere((item) => item.id == cycleId);
   SalaryCycle? previousCycle;
   SalarySummary? previousSummary;
-  if (index > 0) {
+  if (index > 0 &&
+      !cycle.salaryPending &&
+      !chronological[index - 1].salaryPending) {
     previousCycle = chronological[index - 1];
     final previousEntries = await ref
         .watch(transactionRepositoryProvider)
@@ -152,8 +175,11 @@ final cycleReportProvider = FutureProvider.family<CycleReport, String>((
 });
 
 final crossCycleReportProvider = FutureProvider<CrossCycleReport>((ref) async {
-  final cycles = [...await ref.watch(salaryCyclesProvider.future)]
-    ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+  final cycles =
+      [
+          ...await ref.watch(salaryCyclesProvider.future),
+        ].where((cycle) => !cycle.salaryPending).toList()
+        ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
   final points = <CycleTrendPoint>[];
   final categoryByCycle = <String, Map<String, int>>{};
   for (final cycle in cycles) {
@@ -326,9 +352,10 @@ final completeOnboardingProvider = Provider<CompleteOnboarding>(
   ),
 );
 
-final startupProvider = FutureProvider<AppBootstrap>(
-  (ref) => ref.watch(onboardingRepositoryProvider).loadBootstrap(),
-);
+final startupProvider = FutureProvider<AppBootstrap>((ref) async {
+  await ref.watch(autoSettleDueCyclesProvider).execute();
+  return ref.watch(onboardingRepositoryProvider).loadBootstrap();
+});
 
 final homeSnapshotProvider = StreamProvider<HomeSnapshot>((ref) async* {
   final cycle = await ref.watch(salaryCycleRepositoryProvider).getActiveCycle();

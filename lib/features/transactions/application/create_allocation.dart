@@ -40,6 +40,12 @@ final class CreateAllocation {
     if (cycle == null) {
       throw StateError('当前没有可记账的工资周期。');
     }
+    final entryDate = occurredOn ?? LocalDate.fromDateTime(clock.now());
+    final cycleStart = LocalDate.fromDateTime(cycle.startedAt);
+    if (entryDate.compareTo(cycleStart) < 0 ||
+        entryDate.compareTo(cycle.expectedPayDate) >= 0) {
+      throw StateError('账单日期不属于当前周期，请切换到对应历史周期后补记。');
+    }
     final category = await categories.getById(categoryId);
     if (category == null || !category.isTopLevel) {
       throw ArgumentError.value(categoryId, 'categoryId', '请选择有效的一级分类。');
@@ -68,7 +74,7 @@ final class CreateAllocation {
       categoryId: category.id,
       subcategoryId: subcategoryId,
       occurredAt: now,
-      occurredOn: occurredOn ?? LocalDate.fromDateTime(now),
+      occurredOn: entryDate,
       note: trimmedNote == null || trimmedNote.isEmpty ? null : trimmedNote,
     );
     await transactions.add(entry);

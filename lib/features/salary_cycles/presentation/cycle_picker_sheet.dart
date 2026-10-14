@@ -22,7 +22,7 @@ Future<String?> showSalaryCyclePicker({
 
 String formatSalaryCycleRange(SalaryCycle cycle) {
   final start = LocalDate.fromDateTime(cycle.startedAt);
-  return '$start ～ ${cycle.expectedPayDate}';
+  return '$start ～ ${cycle.expectedPayDate.previousDay}';
 }
 
 final class SalaryCycleSelector extends StatelessWidget {

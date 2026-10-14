@@ -52,8 +52,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DropdownButton<String>), findsNothing);
-    expect(find.text('2026-09-10 ～ 2026-10-10'), findsOneWidget);
-    expect(find.text('2026-08-10 ～ 2026-09-10'), findsOneWidget);
+    expect(find.text('2026-09-10 ～ 2026-10-09'), findsOneWidget);
+    expect(find.text('2026-08-10 ～ 2026-09-09'), findsOneWidget);
 
     await tester.drag(find.byType(ListWheelScrollView), const Offset(0, -70));
     await tester.pumpAndSettle();

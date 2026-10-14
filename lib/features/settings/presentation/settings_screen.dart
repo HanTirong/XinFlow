@@ -8,6 +8,9 @@ import 'package:xinflow/features/settings/domain/app_settings.dart';
 import 'package:xinflow/features/settings/presentation/data_management_card.dart';
 import 'package:xinflow/features/security/presentation/privacy_security_screen.dart';
 import 'package:xinflow/features/reminders/presentation/daily_reminder_card.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/salary_cycles/presentation/cycle_picker_sheet.dart';
+import 'package:xinflow/features/salary_cycles/presentation/salary_entry_sheet.dart';
 
 final class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -15,7 +18,6 @@ final class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preference = ref.watch(themePreferenceProvider);
-    final startup = ref.watch(startupProvider);
 
     return SafeArea(
       child: ListView(
@@ -102,24 +104,10 @@ final class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.calendar_today_outlined),
-              title: const Text('固定发薪日'),
-              subtitle: Text(
-                startup.when(
-                  data: (value) => '每月 ${value.settings?.salaryDay ?? '-'} 日',
-                  loading: () => '正在读取…',
-                  error: (error, stackTrace) => '读取失败',
-                ),
-              ),
-              trailing: const Icon(Icons.edit_outlined),
-              onTap: startup.value?.settings == null
-                  ? null
-                  : () => _editSalaryDay(
-                      context,
-                      ref,
-                      startup.value!.settings!.salaryDay,
-                    ),
+            child: const ListTile(
+              leading: Icon(Icons.calendar_today_outlined),
+              title: Text('工资周期'),
+              subtitle: Text('每月 10 日至次月 9 日；打开应用后自动结算。'),
             ),
           ),
           const SizedBox(height: 12),
@@ -127,6 +115,7 @@ final class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           const DailyReminderCard(),
           const SizedBox(height: 12),
+          const _PendingSalaryCard(),
           const DataManagementCard(),
           const SizedBox(height: 12),
           const PrivacySecurityCard(),
@@ -139,65 +128,60 @@ final class SettingsScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.info_outline_rounded),
               title: Text('薪流 0.1.0'),
-              subtitle: Text('数据库版本 6 · 备份格式版本 2'),
+              subtitle: Text('数据库版本 8 · 备份格式版本 2'),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Future<void> _editSalaryDay(
-    BuildContext context,
-    WidgetRef ref,
-    int current,
-  ) async {
-    var salaryDayText = current.toString();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('修改固定发薪日'),
-        content: TextFormField(
-          initialValue: salaryDayText,
-          onChanged: (value) => salaryDayText = value,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: '每月日期',
-            helperText: '请输入 1 至 31；月份较短时取当月最后一天。',
+final class _PendingSalaryCard extends ConsumerWidget {
+  const _PendingSalaryCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pending =
+        ref.watch(pendingSalaryCyclesProvider).value ?? const <SalaryCycle>[];
+    if (pending.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('待填写工资', style: Theme.of(context).textTheme.titleMedium),
+              for (final cycle in pending)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(formatSalaryCycleRange(cycle)),
+                  subtitle: Text(
+                    cycle.status == SalaryCycleStatus.active ? '当前周期' : '历史周期',
+                  ),
+                  trailing: const Icon(Icons.edit_outlined),
+                  onTap: () async {
+                    final saved = await showModalBottomSheet<bool>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      builder: (context) => SalaryEntrySheet(cycle: cycle),
+                    );
+                    if (saved != true) return;
+                    ref
+                      ..invalidate(pendingSalaryCyclesProvider)
+                      ..invalidate(homeSnapshotProvider)
+                      ..invalidate(salaryCyclesProvider)
+                      ..invalidate(cycleReportProvider)
+                      ..invalidate(crossCycleReportProvider);
+                  },
+                ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
-    final value = int.tryParse(salaryDayText);
-    if (confirmed != true) return;
-    if (value == null || value < 1 || value > 31) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('发薪日必须是 1 至 31。')));
-      }
-      return;
-    }
-    await ref.read(settingsRepositoryProvider).updateSalaryDay(value);
-    ref
-      ..invalidate(startupProvider)
-      ..invalidate(homeSnapshotProvider)
-      ..invalidate(salaryCyclesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('固定发薪日已更新。')));
-    }
   }
 }

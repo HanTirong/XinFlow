@@ -845,7 +845,9 @@ final class _BackupPayload {
             .toList(growable: false),
         cycles: list('salaryCycles')
             .map((row) {
-              row.putIfAbsent('carryoverCents', () => 0);
+              row
+                ..putIfAbsent('carryoverCents', () => 0)
+                ..putIfAbsent('salaryPending', () => false);
               return SalaryCycleRecord.fromJson(row);
             })
             .toList(growable: false),

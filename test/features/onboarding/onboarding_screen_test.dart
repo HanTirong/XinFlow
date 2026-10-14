@@ -28,11 +28,13 @@ void main() {
     await tester.tap(find.text('开始记录工资流向'));
     await tester.pump();
 
-    expect(submittedDay, 15);
+    expect(submittedDay, 10);
     expect(submittedSalary, 850050);
   });
 
-  testWidgets('rejects an invalid payday before submitting', (tester) async {
+  testWidgets('shows the fixed cycle and rejects an invalid salary', (
+    tester,
+  ) async {
     var submissionCount = 0;
 
     await tester.pumpWidget(
@@ -46,15 +48,12 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.widgetWithText(TextFormField, '固定发薪日'), '32');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '本期到账工资'),
-      '8500',
-    );
+    expect(find.text('每月 10 日至次月 9 日'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, '本期到账工资'), '');
     await tester.tap(find.text('开始记录工资流向'));
     await tester.pump();
 
-    expect(find.text('请输入 1 至 31 之间的日期。'), findsOneWidget);
+    expect(find.byType(TextFormField), findsOneWidget);
     expect(submissionCount, 0);
   });
 }

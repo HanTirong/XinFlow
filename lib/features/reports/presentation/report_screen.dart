@@ -70,6 +70,7 @@ final class _ReportScreenState extends ConsumerState<ReportScreen> {
                     report: value,
                     categories: categories,
                     crossCycle: crossCycle,
+                    salaryPending: selected.salaryPending,
                   ),
                 ),
               ),
@@ -100,11 +101,13 @@ final class _ReportBody extends StatelessWidget {
     required this.report,
     required this.categories,
     required this.crossCycle,
+    required this.salaryPending,
   });
 
   final CycleReport report;
   final List<Category> categories;
   final CrossCycleReport? crossCycle;
+  final bool salaryPending;
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +123,13 @@ final class _ReportBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 120),
       children: [
+        if (salaryPending)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(14),
+              child: Text('这个周期的工资尚未填写。工资余额和跨周期比较会在补填后更新。'),
+            ),
+          ),
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -128,11 +138,19 @@ final class _ReportBody extends StatelessWidget {
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
           children: [
-            _MetricCard(label: '工资', cents: summary.salaryCents),
+            _MetricCard(
+              label: '工资',
+              cents: summary.salaryCents,
+              displayValue: salaryPending ? '待填写' : null,
+            ),
             _MetricCard(label: '净消费', cents: summary.netExpenseCents),
             _MetricCard(label: '存款', cents: summary.savingCents),
             _MetricCard(label: '理财', cents: summary.investmentCents),
-            _MetricCard(label: '最终剩余', cents: summary.remainingCents),
+            _MetricCard(
+              label: '最终剩余',
+              cents: summary.remainingCents,
+              displayValue: salaryPending ? '待填写' : null,
+            ),
             _MetricCard(label: '已分配', cents: summary.allocatedCents),
           ],
         ),
@@ -452,10 +470,15 @@ final class _DailyTrendPainter extends CustomPainter {
 }
 
 final class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.label, required this.cents});
+  const _MetricCard({
+    required this.label,
+    required this.cents,
+    this.displayValue,
+  });
 
   final String label;
   final int cents;
+  final String? displayValue;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -469,7 +492,7 @@ final class _MetricCard extends StatelessWidget {
           const SizedBox(height: 5),
           FittedBox(
             child: Text(
-              Money.fromCents(cents).format(),
+              displayValue ?? Money.fromCents(cents).format(),
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
@@ -604,5 +627,5 @@ double _ratio(int cents, int salaryCents) =>
 
 String _cycleRange(SalaryCycle cycle) {
   final start = LocalDate.fromDateTime(cycle.startedAt);
-  return '$start ～ ${cycle.expectedPayDate}';
+  return '$start ～ ${cycle.expectedPayDate.previousDay}';
 }

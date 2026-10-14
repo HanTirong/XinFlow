@@ -82,6 +82,7 @@ final class DriftSalaryCycleRepository implements SalaryCycleRepository {
           SalaryCycleRecordsCompanion.insert(
             id: newActiveCycle.id,
             salaryCents: newActiveCycle.salaryCents,
+            salaryPending: Value(newActiveCycle.salaryPending),
             carryoverCents: Value(newActiveCycle.carryoverCents),
             startedAt: createdAt,
             expectedPayDate: newActiveCycle.expectedPayDate.toString(),

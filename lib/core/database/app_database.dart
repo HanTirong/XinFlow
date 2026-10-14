@@ -1,11 +1,21 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:xinflow/core/database/database_mappers.dart';
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/date/payday_calculator.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/categories/domain/default_categories.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_summary.dart';
 
 part 'app_database.g.dart';
+
+typedef CycleUndoPreviewRecord = ({
+  SalaryCycleRecord active,
+  SalaryCycleRecord previous,
+  int transactionCount,
+  int budgetCount,
+});
 
 class SalaryCycleRecords extends Table {
   @override
@@ -14,6 +24,8 @@ class SalaryCycleRecords extends Table {
   TextColumn get id => text()();
   IntColumn get salaryCents =>
       integer().customConstraint('NOT NULL CHECK (salary_cents >= 0)')();
+  BoolColumn get salaryPending =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get carryoverCents => integer().customConstraint(
     'NOT NULL DEFAULT 0 CHECK (carryover_cents >= 0)',
   )();
@@ -184,7 +196,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -293,8 +305,161 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5) await _seedTravelCategories();
       if (from < 6) await _seedFixedExpenseCategory();
+      if (from < 7) {
+        if (!await _columnExists('salary_cycles', 'salary_pending')) {
+          await migrator.addColumn(
+            salaryCycleRecords,
+            salaryCycleRecords.salaryPending,
+          );
+        }
+        await adoptTenthDayCycles();
+      }
+      if (from < 8) await repairTenthDayCycles();
     },
   );
+
+  Future<void> adoptTenthDayCycles({DateTime? now}) async {
+    final settings = await select(appSettingRecords).getSingleOrNull();
+    if (settings == null) return;
+    final instant = now ?? DateTime.now();
+    if (settings.salaryDay != 10) {
+      await (update(
+        appSettingRecords,
+      )..where((row) => row.singletonId.equals(1))).write(
+        AppSettingRecordsCompanion(
+          salaryDay: const Value(10),
+          updatedAt: Value(instant.toUtc().millisecondsSinceEpoch),
+        ),
+      );
+    }
+    await repairTenthDayCycles(now: instant);
+  }
+
+  /// Repairs the old migration that extended one active cycle across paydays.
+  /// Called inside the upgrade/startup transaction; repeating it is harmless.
+  Future<void> repairTenthDayCycles({DateTime? now}) async {
+    final instant = now ?? DateTime.now();
+    final stamp = instant.toUtc().millisecondsSinceEpoch;
+    final today = LocalDate.fromDateTime(instant);
+    final currentStart = PaydayCalculator.cycleStartOnOrBefore(
+      today: today,
+      salaryDay: 10,
+    );
+    final initialActive =
+        await (select(salaryCycleRecords)..where(
+              (row) => row.status.equals('active') & row.deletedAt.isNull(),
+            ))
+            .getSingleOrNull();
+    if (initialActive == null) return;
+    var active = initialActive;
+    var start = LocalDate.fromDateTime(
+      DateTime.fromMillisecondsSinceEpoch(active.startedAt),
+    );
+    if (start.compareTo(today) > 0) return;
+
+    var boundary = PaydayCalculator.forNextCycle(
+      confirmedDate: PaydayCalculator.cycleStartOnOrBefore(
+        today: start,
+        salaryDay: 10,
+      ),
+      salaryDay: 10,
+    );
+    var splitCount = 0;
+    while (boundary.compareTo(currentStart) <= 0) {
+      if (++splitCount > 120) {
+        throw StateError('工资周期与手机日期相差过大，请检查系统日期。');
+      }
+      final oldRows = await (select(
+        transactionRecords,
+      )..where((row) => row.salaryCycleId.equals(active.id))).get();
+      final movedAllocations = oldRows
+          .where(
+            (row) =>
+                row.entryKind == 'allocation' &&
+                LocalDate.parse(row.occurredOn).compareTo(boundary) >= 0,
+          )
+          .map((row) => row.id)
+          .toSet();
+      final newId = const Uuid().v7();
+      final nextBoundary = PaydayCalculator.forNextCycle(
+        confirmedDate: boundary,
+        salaryDay: 10,
+      );
+      final movingRows = oldRows.where(
+        (row) =>
+            movedAllocations.contains(row.id) ||
+            movedAllocations.contains(row.reversesTransactionId),
+      );
+      final movingIds = movingRows.map((row) => row.id).toSet();
+      final remainingRows = oldRows.where(
+        (row) => !movingIds.contains(row.id) && row.deletedAt == null,
+      );
+      final summary = SalarySummary.fromTransactions(
+        salaryCents: active.salaryCents,
+        carryoverCents: active.carryoverCents,
+        transactions: remainingRows.map((row) => row.toDomain()),
+      );
+      await (update(
+        salaryCycleRecords,
+      )..where((row) => row.id.equals(active.id))).write(
+        SalaryCycleRecordsCompanion(
+          expectedPayDate: Value(boundary.toString()),
+          status: const Value('closed'),
+          closedAt: Value(stamp),
+          finalRemainingCents: Value(summary.remainingCents),
+          updatedAt: Value(stamp),
+        ),
+      );
+      await into(salaryCycleRecords).insert(
+        SalaryCycleRecordsCompanion.insert(
+          id: newId,
+          salaryCents: 0,
+          salaryPending: const Value(true),
+          startedAt: DateTime(
+            boundary.year,
+            boundary.month,
+            boundary.day,
+          ).toUtc().millisecondsSinceEpoch,
+          expectedPayDate: nextBoundary.toString(),
+          status: 'active',
+          createdAt: stamp,
+          updatedAt: stamp,
+        ),
+      );
+      for (final row in movingRows) {
+        await (update(
+          transactionRecords,
+        )..where((item) => item.id.equals(row.id))).write(
+          TransactionRecordsCompanion(
+            salaryCycleId: Value(newId),
+            updatedAt: Value(stamp),
+          ),
+        );
+      }
+      active = await (select(
+        salaryCycleRecords,
+      )..where((row) => row.id.equals(newId))).getSingle();
+      start = boundary;
+      boundary = nextBoundary;
+    }
+    final expectedEnd = PaydayCalculator.forNextCycle(
+      confirmedDate: PaydayCalculator.cycleStartOnOrBefore(
+        today: start,
+        salaryDay: 10,
+      ),
+      salaryDay: 10,
+    );
+    if (active.expectedPayDate != expectedEnd.toString()) {
+      await (update(
+        salaryCycleRecords,
+      )..where((row) => row.id.equals(active.id))).write(
+        SalaryCycleRecordsCompanion(
+          expectedPayDate: Value(expectedEnd.toString()),
+          updatedAt: Value(stamp),
+        ),
+      );
+    }
+  }
 
   Future<void> _alignCyclesToSalaryDay() async {
     final settings = await select(appSettingRecords).getSingleOrNull();
@@ -392,13 +557,14 @@ class AppDatabase extends _$AppDatabase {
 
     var parentId = travel.id;
     if (existingById == null) {
-      final existingByName = await (select(categoryRecords)..where(
-            (row) =>
-                row.parentId.isNull() &
-                row.name.equals(travel.name) &
-                row.deletedAt.isNull(),
-          ))
-          .getSingleOrNull();
+      final existingByName =
+          await (select(categoryRecords)..where(
+                (row) =>
+                    row.parentId.isNull() &
+                    row.name.equals(travel.name) &
+                    row.deletedAt.isNull(),
+              ))
+              .getSingleOrNull();
       if (existingByName != null && existingByName.flowType == 'expense') {
         parentId = existingByName.id;
       } else {
@@ -416,13 +582,14 @@ class AppDatabase extends _$AppDatabase {
         categoryRecords,
       )..where((row) => row.id.equals(child.id))).getSingleOrNull();
       if (childById != null) continue;
-      final childByName = await (select(categoryRecords)..where(
-            (row) =>
-                row.parentId.equals(parentId) &
-                row.name.equals(child.name) &
-                row.deletedAt.isNull(),
-          ))
-          .getSingleOrNull();
+      final childByName =
+          await (select(categoryRecords)..where(
+                (row) =>
+                    row.parentId.equals(parentId) &
+                    row.name.equals(child.name) &
+                    row.deletedAt.isNull(),
+              ))
+              .getSingleOrNull();
       if (childByName == null) {
         await _insertDefaultCategory(child, parentId: parentId);
       }
@@ -438,13 +605,14 @@ class AppDatabase extends _$AppDatabase {
     )..where((row) => row.id.equals(fixedExpense.id))).getSingleOrNull();
     if (existingById != null) return;
 
-    final existingByName = await (select(categoryRecords)..where(
-          (row) =>
-              row.parentId.isNull() &
-              row.name.equals(fixedExpense.name) &
-              row.deletedAt.isNull(),
-        ))
-        .getSingleOrNull();
+    final existingByName =
+        await (select(categoryRecords)..where(
+              (row) =>
+                  row.parentId.isNull() &
+                  row.name.equals(fixedExpense.name) &
+                  row.deletedAt.isNull(),
+            ))
+            .getSingleOrNull();
     if (existingByName != null && existingByName.flowType == 'expense') return;
 
     await _insertDefaultCategory(
@@ -505,5 +673,84 @@ class AppDatabase extends _$AppDatabase {
     await (delete(
       salaryCycleRecords,
     )..where((row) => row.id.equals(cycleId))).go();
+  });
+
+  Future<CycleUndoPreviewRecord?> previewLatestCycleUndo() async {
+    final active =
+        await (select(salaryCycleRecords)..where(
+              (row) => row.status.equals('active') & row.deletedAt.isNull(),
+            ))
+            .getSingleOrNull();
+    if (active == null) return null;
+
+    final previous =
+        await (select(salaryCycleRecords)
+              ..where(
+                (row) => row.status.equals('closed') & row.deletedAt.isNull(),
+              )
+              ..orderBy([(row) => OrderingTerm.desc(row.startedAt)])
+              ..limit(1))
+            .getSingleOrNull();
+    if (previous == null) return null;
+
+    final counts = await customSelect(
+      '''
+        SELECT
+          (SELECT COUNT(*) FROM transactions WHERE salary_cycle_id = ?) AS transaction_count,
+          (SELECT COUNT(*) FROM budgets WHERE salary_cycle_id = ?) AS budget_count
+      ''',
+      variables: [Variable(active.id), Variable(active.id)],
+    ).getSingle();
+    return (
+      active: active,
+      previous: previous,
+      transactionCount: counts.read<int>('transaction_count'),
+      budgetCount: counts.read<int>('budget_count'),
+    );
+  }
+
+  Future<void> undoLatestCycleTransition() => transaction(() async {
+    final preview = await previewLatestCycleUndo();
+    if (preview == null) {
+      throw StateError('没有可以撤销的工资周期切换。');
+    }
+    if (preview.transactionCount > 0 || preview.budgetCount > 0) {
+      throw StateError('当前周期已有流水或预算，请先清理后再撤销。');
+    }
+
+    final deleted =
+        await (delete(salaryCycleRecords)..where(
+              (row) =>
+                  row.id.equals(preview.active.id) &
+                  row.status.equals('active') &
+                  row.deletedAt.isNull(),
+            ))
+            .go();
+    if (deleted != 1) throw StateError('当前工资周期已发生变化，撤销已取消。');
+
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final restored =
+        await (update(salaryCycleRecords)..where(
+              (row) =>
+                  row.id.equals(preview.previous.id) &
+                  row.status.equals('closed') &
+                  row.deletedAt.isNull(),
+            ))
+            .write(
+              SalaryCycleRecordsCompanion(
+                status: const Value('active'),
+                closedAt: const Value(null),
+                finalRemainingCents: const Value(null),
+                updatedAt: Value(now),
+              ),
+            );
+    if (restored != 1) throw StateError('上一工资周期已发生变化，撤销已取消。');
+
+    final activeCount = await customSelect(
+      "SELECT COUNT(*) AS count FROM salary_cycles WHERE status = 'active' AND deleted_at IS NULL",
+    ).getSingle();
+    if (activeCount.read<int>('count') != 1) {
+      throw StateError('工资周期状态异常，撤销已回滚。');
+    }
   });
 }

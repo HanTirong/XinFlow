@@ -16,14 +16,13 @@ void main() {
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
+    final clock = _MutableClock(DateTime.utc(2026, 9, 19, 9));
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(database),
-          clockProvider.overrideWithValue(
-            _FixedClock(DateTime.utc(2026, 9, 19, 9)),
-          ),
+          clockProvider.overrideWithValue(clock),
           idGeneratorProvider.overrideWithValue(
             _SequenceIdGenerator([
               'cycle-initial',
@@ -133,14 +132,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('¥8,500'), findsNWidgets(2));
 
-    await tester.tap(find.text('距离下次发薪'));
+    clock.value = DateTime(2026, 10, 10, 9);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
-    expect(find.text('确认工资到账'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextFormField, '新到账工资'), '9000');
-    await tester.tap(find.text('确认并开始新周期'));
+    expect(find.text('填写本期到账工资'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, '到账工资'), '9000');
+    await tester.tap(find.text('保存工资金额'));
     await tester.pumpAndSettle();
     expect(find.text('¥9,000'), findsNWidgets(2));
-    expect(find.text('新工资周期已开始。'), findsOneWidget);
+    expect(find.text('工资金额已保存。'), findsOneWidget);
 
     final switchedCycles = await database
         .select(database.salaryCycleRecords)
@@ -195,10 +195,10 @@ void main() {
   });
 }
 
-final class _FixedClock implements Clock {
-  const _FixedClock(this.value);
+final class _MutableClock implements Clock {
+  _MutableClock(this.value);
 
-  final DateTime value;
+  DateTime value;
 
   @override
   DateTime now() => value;

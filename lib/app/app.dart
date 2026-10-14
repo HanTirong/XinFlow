@@ -17,8 +17,64 @@ final class XinFlowApp extends ConsumerStatefulWidget {
   ConsumerState<XinFlowApp> createState() => _XinFlowAppState();
 }
 
-final class _XinFlowAppState extends ConsumerState<XinFlowApp> {
+final class _XinFlowAppState extends ConsumerState<XinFlowApp>
+    with WidgetsBindingObserver {
   String? _reminderSignature;
+  Timer? _dateCheckTimer;
+  bool _checkingDate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleNextDateCheck();
+  }
+
+  @override
+  void dispose() {
+    _dateCheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkDate());
+      _scheduleNextDateCheck();
+    }
+  }
+
+  void _scheduleNextDateCheck() {
+    _dateCheckTimer?.cancel();
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1, 0, 0, 2);
+    _dateCheckTimer = Timer(next.difference(now), () {
+      unawaited(_checkDate());
+      _scheduleNextDateCheck();
+    });
+  }
+
+  Future<void> _checkDate() async {
+    if (_checkingDate || !mounted) return;
+    _checkingDate = true;
+    try {
+      final changed = await ref.read(autoSettleDueCyclesProvider).execute();
+      if (changed > 0 && mounted) {
+        ref
+          ..invalidate(homeSnapshotProvider)
+          ..invalidate(salaryCyclesProvider)
+          ..invalidate(pendingSalaryCyclesProvider)
+          ..invalidate(currentCycleTransactionsProvider)
+          ..invalidate(cycleReportProvider)
+          ..invalidate(crossCycleReportProvider);
+      }
+    } on Object catch (error) {
+      debugPrint('Salary cycle date check failed: $error');
+    } finally {
+      _checkingDate = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

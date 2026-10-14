@@ -13,18 +13,23 @@ final class HomeSnapshot {
     required this.shortcuts,
     required this.recentTransactions,
     this.isPreview = false,
+    this.cycleStartsInFuture = false,
   });
 
   factory HomeSnapshot.preview(DateTime now) {
     final today = LocalDate.fromDateTime(now);
-    final expectedPayday = PaydayCalculator.nextOnOrAfter(
+    final cycleStart = PaydayCalculator.cycleStartOnOrBefore(
       today: today,
-      salaryDay: 30,
+      salaryDay: 10,
+    );
+    final expectedPayday = PaydayCalculator.forNextCycle(
+      confirmedDate: cycleStart,
+      salaryDay: 10,
     );
     final cycle = SalaryCycle(
       id: 'preview-cycle',
       salaryCents: 1700000,
-      startedAt: DateTime(now.year, now.month, 1, 9),
+      startedAt: DateTime(cycleStart.year, cycleStart.month, cycleStart.day),
       expectedPayDate: expectedPayday,
       status: SalaryCycleStatus.active,
     );
@@ -75,10 +80,7 @@ final class HomeSnapshot {
         carryoverCents: cycle.carryoverCents,
         transactions: transactions,
       ),
-      daysUntilPayday: PaydayCalculator.daysUntilNext(
-        today: today,
-        salaryDay: 30,
-      ),
+      daysUntilPayday: today.daysUntil(expectedPayday),
       shortcuts: const [
         CategoryShortcut(id: DefaultCategoryIds.food, label: '饮食'),
         CategoryShortcut(id: DefaultCategoryIds.shopping, label: '购物'),
@@ -112,6 +114,8 @@ final class HomeSnapshot {
         transactions: activeTransactions,
       ),
       daysUntilPayday: today.daysUntil(cycle.expectedPayDate).clamp(0, 99999),
+      cycleStartsInFuture:
+          LocalDate.fromDateTime(cycle.startedAt).compareTo(today) > 0,
       shortcuts: const [
         CategoryShortcut(id: DefaultCategoryIds.food, label: '饮食'),
         CategoryShortcut(id: DefaultCategoryIds.shopping, label: '购物'),
@@ -132,6 +136,7 @@ final class HomeSnapshot {
   final List<CategoryShortcut> shortcuts;
   final List<TransactionEntry> recentTransactions;
   final bool isPreview;
+  final bool cycleStartsInFuture;
 
   static TransactionEntry _previewEntry({
     required String id,

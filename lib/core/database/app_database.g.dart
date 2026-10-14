@@ -30,6 +30,21 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL CHECK (salary_cents >= 0)',
   );
+  static const VerificationMeta _salaryPendingMeta = const VerificationMeta(
+    'salaryPending',
+  );
+  @override
+  late final GeneratedColumn<bool> salaryPending = GeneratedColumn<bool>(
+    'salary_pending',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("salary_pending" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _carryoverCentsMeta = const VerificationMeta(
     'carryoverCents',
   );
@@ -133,6 +148,7 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
   List<GeneratedColumn> get $columns => [
     id,
     salaryCents,
+    salaryPending,
     carryoverCents,
     startedAt,
     expectedPayDate,
@@ -170,6 +186,15 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
       );
     } else if (isInserting) {
       context.missing(_salaryCentsMeta);
+    }
+    if (data.containsKey('salary_pending')) {
+      context.handle(
+        _salaryPendingMeta,
+        salaryPending.isAcceptableOrUnknown(
+          data['salary_pending']!,
+          _salaryPendingMeta,
+        ),
+      );
     }
     if (data.containsKey('carryover_cents')) {
       context.handle(
@@ -261,6 +286,10 @@ class $SalaryCycleRecordsTable extends SalaryCycleRecords
         DriftSqlType.int,
         data['${effectivePrefix}salary_cents'],
       )!,
+      salaryPending: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}salary_pending'],
+      )!,
       carryoverCents: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}carryover_cents'],
@@ -310,6 +339,7 @@ class SalaryCycleRecord extends DataClass
     implements Insertable<SalaryCycleRecord> {
   final String id;
   final int salaryCents;
+  final bool salaryPending;
   final int carryoverCents;
   final int startedAt;
   final String expectedPayDate;
@@ -322,6 +352,7 @@ class SalaryCycleRecord extends DataClass
   const SalaryCycleRecord({
     required this.id,
     required this.salaryCents,
+    required this.salaryPending,
     required this.carryoverCents,
     required this.startedAt,
     required this.expectedPayDate,
@@ -337,6 +368,7 @@ class SalaryCycleRecord extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['salary_cents'] = Variable<int>(salaryCents);
+    map['salary_pending'] = Variable<bool>(salaryPending);
     map['carryover_cents'] = Variable<int>(carryoverCents);
     map['started_at'] = Variable<int>(startedAt);
     map['expected_pay_date'] = Variable<String>(expectedPayDate);
@@ -359,6 +391,7 @@ class SalaryCycleRecord extends DataClass
     return SalaryCycleRecordsCompanion(
       id: Value(id),
       salaryCents: Value(salaryCents),
+      salaryPending: Value(salaryPending),
       carryoverCents: Value(carryoverCents),
       startedAt: Value(startedAt),
       expectedPayDate: Value(expectedPayDate),
@@ -385,6 +418,7 @@ class SalaryCycleRecord extends DataClass
     return SalaryCycleRecord(
       id: serializer.fromJson<String>(json['id']),
       salaryCents: serializer.fromJson<int>(json['salaryCents']),
+      salaryPending: serializer.fromJson<bool>(json['salaryPending']),
       carryoverCents: serializer.fromJson<int>(json['carryoverCents']),
       startedAt: serializer.fromJson<int>(json['startedAt']),
       expectedPayDate: serializer.fromJson<String>(json['expectedPayDate']),
@@ -404,6 +438,7 @@ class SalaryCycleRecord extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'salaryCents': serializer.toJson<int>(salaryCents),
+      'salaryPending': serializer.toJson<bool>(salaryPending),
       'carryoverCents': serializer.toJson<int>(carryoverCents),
       'startedAt': serializer.toJson<int>(startedAt),
       'expectedPayDate': serializer.toJson<String>(expectedPayDate),
@@ -419,6 +454,7 @@ class SalaryCycleRecord extends DataClass
   SalaryCycleRecord copyWith({
     String? id,
     int? salaryCents,
+    bool? salaryPending,
     int? carryoverCents,
     int? startedAt,
     String? expectedPayDate,
@@ -431,6 +467,7 @@ class SalaryCycleRecord extends DataClass
   }) => SalaryCycleRecord(
     id: id ?? this.id,
     salaryCents: salaryCents ?? this.salaryCents,
+    salaryPending: salaryPending ?? this.salaryPending,
     carryoverCents: carryoverCents ?? this.carryoverCents,
     startedAt: startedAt ?? this.startedAt,
     expectedPayDate: expectedPayDate ?? this.expectedPayDate,
@@ -449,6 +486,9 @@ class SalaryCycleRecord extends DataClass
       salaryCents: data.salaryCents.present
           ? data.salaryCents.value
           : this.salaryCents,
+      salaryPending: data.salaryPending.present
+          ? data.salaryPending.value
+          : this.salaryPending,
       carryoverCents: data.carryoverCents.present
           ? data.carryoverCents.value
           : this.carryoverCents,
@@ -472,6 +512,7 @@ class SalaryCycleRecord extends DataClass
     return (StringBuffer('SalaryCycleRecord(')
           ..write('id: $id, ')
           ..write('salaryCents: $salaryCents, ')
+          ..write('salaryPending: $salaryPending, ')
           ..write('carryoverCents: $carryoverCents, ')
           ..write('startedAt: $startedAt, ')
           ..write('expectedPayDate: $expectedPayDate, ')
@@ -489,6 +530,7 @@ class SalaryCycleRecord extends DataClass
   int get hashCode => Object.hash(
     id,
     salaryCents,
+    salaryPending,
     carryoverCents,
     startedAt,
     expectedPayDate,
@@ -505,6 +547,7 @@ class SalaryCycleRecord extends DataClass
       (other is SalaryCycleRecord &&
           other.id == this.id &&
           other.salaryCents == this.salaryCents &&
+          other.salaryPending == this.salaryPending &&
           other.carryoverCents == this.carryoverCents &&
           other.startedAt == this.startedAt &&
           other.expectedPayDate == this.expectedPayDate &&
@@ -519,6 +562,7 @@ class SalaryCycleRecord extends DataClass
 class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   final Value<String> id;
   final Value<int> salaryCents;
+  final Value<bool> salaryPending;
   final Value<int> carryoverCents;
   final Value<int> startedAt;
   final Value<String> expectedPayDate;
@@ -532,6 +576,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   const SalaryCycleRecordsCompanion({
     this.id = const Value.absent(),
     this.salaryCents = const Value.absent(),
+    this.salaryPending = const Value.absent(),
     this.carryoverCents = const Value.absent(),
     this.startedAt = const Value.absent(),
     this.expectedPayDate = const Value.absent(),
@@ -546,6 +591,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   SalaryCycleRecordsCompanion.insert({
     required String id,
     required int salaryCents,
+    this.salaryPending = const Value.absent(),
     this.carryoverCents = const Value.absent(),
     required int startedAt,
     required String expectedPayDate,
@@ -566,6 +612,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   static Insertable<SalaryCycleRecord> custom({
     Expression<String>? id,
     Expression<int>? salaryCents,
+    Expression<bool>? salaryPending,
     Expression<int>? carryoverCents,
     Expression<int>? startedAt,
     Expression<String>? expectedPayDate,
@@ -580,6 +627,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (salaryCents != null) 'salary_cents': salaryCents,
+      if (salaryPending != null) 'salary_pending': salaryPending,
       if (carryoverCents != null) 'carryover_cents': carryoverCents,
       if (startedAt != null) 'started_at': startedAt,
       if (expectedPayDate != null) 'expected_pay_date': expectedPayDate,
@@ -597,6 +645,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
   SalaryCycleRecordsCompanion copyWith({
     Value<String>? id,
     Value<int>? salaryCents,
+    Value<bool>? salaryPending,
     Value<int>? carryoverCents,
     Value<int>? startedAt,
     Value<String>? expectedPayDate,
@@ -611,6 +660,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return SalaryCycleRecordsCompanion(
       id: id ?? this.id,
       salaryCents: salaryCents ?? this.salaryCents,
+      salaryPending: salaryPending ?? this.salaryPending,
       carryoverCents: carryoverCents ?? this.carryoverCents,
       startedAt: startedAt ?? this.startedAt,
       expectedPayDate: expectedPayDate ?? this.expectedPayDate,
@@ -632,6 +682,9 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     }
     if (salaryCents.present) {
       map['salary_cents'] = Variable<int>(salaryCents.value);
+    }
+    if (salaryPending.present) {
+      map['salary_pending'] = Variable<bool>(salaryPending.value);
     }
     if (carryoverCents.present) {
       map['carryover_cents'] = Variable<int>(carryoverCents.value);
@@ -671,6 +724,7 @@ class SalaryCycleRecordsCompanion extends UpdateCompanion<SalaryCycleRecord> {
     return (StringBuffer('SalaryCycleRecordsCompanion(')
           ..write('id: $id, ')
           ..write('salaryCents: $salaryCents, ')
+          ..write('salaryPending: $salaryPending, ')
           ..write('carryoverCents: $carryoverCents, ')
           ..write('startedAt: $startedAt, ')
           ..write('expectedPayDate: $expectedPayDate, ')
