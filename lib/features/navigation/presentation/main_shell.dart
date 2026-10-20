@@ -5,7 +5,7 @@ import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/budgets/domain/budget_calculator.dart';
 import 'package:xinflow/features/categories/presentation/category_management_card.dart';
-import 'package:xinflow/features/home/domain/home_snapshot.dart';
+import 'package:xinflow/features/home/presentation/flow_breakdown_screen.dart';
 import 'package:xinflow/features/home/presentation/home_screen.dart';
 import 'package:xinflow/features/reports/presentation/report_screen.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
@@ -109,6 +109,16 @@ final class _MainShellState extends ConsumerState<MainShell> {
             onEditCategories: () => showCategoryManagementSheet(context),
             onViewAllTransactions: () => _selectPage(1),
             onEditTransaction: _openEditAllocation,
+            onOpenFlowDetail: (flowType) => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => FlowBreakdownScreen(
+                  cycle: snapshot.cycle,
+                  flowType: flowType,
+                  hideAmounts:
+                      (settings?.hideAmounts ?? false) && !_amountsRevealed,
+                ),
+              ),
+            ),
             categories: categories,
             budgetProgress: BudgetCalculator.calculate(
               budgets: budgets,

@@ -19,6 +19,7 @@ final class HomeScreen extends StatelessWidget {
     required this.onEditCategories,
     required this.onViewAllTransactions,
     required this.onEditTransaction,
+    this.onOpenFlowDetail,
     this.hideAmounts = false,
     this.amountsRevealed = false,
     this.onToggleAmounts,
@@ -35,6 +36,7 @@ final class HomeScreen extends StatelessWidget {
   final VoidCallback onEditCategories;
   final VoidCallback onViewAllTransactions;
   final ValueChanged<TransactionEntry> onEditTransaction;
+  final ValueChanged<FlowType>? onOpenFlowDetail;
   final List<Category> categories;
   final bool hideAmounts;
   final bool amountsRevealed;
@@ -76,6 +78,7 @@ final class HomeScreen extends StatelessWidget {
                       _SalaryCard(
                         snapshot: snapshot,
                         onSalaryReceived: onSalaryReceived,
+                        onOpenFlowDetail: onOpenFlowDetail,
                       ),
                       if (_reminders.isNotEmpty) ...[
                         const SizedBox(height: 12),
@@ -283,10 +286,15 @@ final class _PreviewBadge extends StatelessWidget {
 }
 
 final class _SalaryCard extends StatelessWidget {
-  const _SalaryCard({required this.snapshot, required this.onSalaryReceived});
+  const _SalaryCard({
+    required this.snapshot,
+    required this.onSalaryReceived,
+    required this.onOpenFlowDetail,
+  });
 
   final HomeSnapshot snapshot;
   final VoidCallback onSalaryReceived;
+  final ValueChanged<FlowType>? onOpenFlowDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -431,6 +439,9 @@ final class _SalaryCard extends StatelessWidget {
                   categoryId: DefaultCategoryIds.food,
                   label: '净消费',
                   cents: summary.netExpenseCents,
+                  onTap: onOpenFlowDetail == null
+                      ? null
+                      : () => onOpenFlowDetail!(FlowType.expense),
                 ),
               ),
               Expanded(
@@ -438,6 +449,9 @@ final class _SalaryCard extends StatelessWidget {
                   categoryId: DefaultCategoryIds.saving,
                   label: '存款',
                   cents: summary.savingCents,
+                  onTap: onOpenFlowDetail == null
+                      ? null
+                      : () => onOpenFlowDetail!(FlowType.saving),
                 ),
               ),
               Expanded(
@@ -445,6 +459,9 @@ final class _SalaryCard extends StatelessWidget {
                   categoryId: DefaultCategoryIds.investment,
                   label: '理财',
                   cents: summary.investmentCents,
+                  onTap: onOpenFlowDetail == null
+                      ? null
+                      : () => onOpenFlowDetail!(FlowType.investment),
                 ),
               ),
             ],
@@ -483,40 +500,46 @@ final class _FlowMetric extends StatelessWidget {
     required this.categoryId,
     required this.label,
     required this.cents,
+    this.onTap,
   });
 
   final String categoryId;
   final String label;
   final int cents;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final visual = CategoryVisuals.resolve(categoryId: categoryId);
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              visual.icon,
-              size: 15,
-              color: visual.resolvedIconColor(context),
-            ),
-            const SizedBox(width: 4),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            _privateMoney(context, cents),
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                visual.icon,
+                size: 15,
+                color: visual.resolvedIconColor(context),
+              ),
+              const SizedBox(width: 4),
+              Text(label, style: Theme.of(context).textTheme.bodySmall),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              _privateMoney(context, cents),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
