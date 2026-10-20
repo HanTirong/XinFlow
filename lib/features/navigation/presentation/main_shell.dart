@@ -142,7 +142,12 @@ final class _MainShellState extends ConsumerState<MainShell> {
         onAddHistorical: _openAddHistoricalAllocation,
         onEditHistorical: _openEditHistoricalAllocation,
       ),
-      const ReportScreen(),
+      ReportScreen(
+        hideAmounts: (settings?.hideAmounts ?? false) && !_amountsRevealed,
+        showPrivacyToggle: settings?.hideAmounts ?? false,
+        onToggleAmounts: () =>
+            setState(() => _amountsRevealed = !_amountsRevealed),
+      ),
       const SettingsScreen(),
     ];
 
