@@ -236,12 +236,19 @@ final class _MainShellState extends ConsumerState<MainShell> {
       ),
     );
     if (result != null && mounted) {
-      final isHistorical = historicalCycle != null;
+      final isHistorical =
+          historicalCycle != null ||
+          result == AllocationEditorResult.createdHistorical ||
+          result == AllocationEditorResult.updatedHistorical;
       final message = switch (result) {
-        AllocationEditorResult.created =>
-          isHistorical ? '历史流水已补记，周期余额已重新计算。' : '已记入本期工资流向。',
-        AllocationEditorResult.updated =>
-          isHistorical ? '历史流水修正已保存。' : '流水修改已保存。',
+        AllocationEditorResult.created => '已记入本期工资流向。',
+        AllocationEditorResult.createdHistorical =>
+          historicalCycle == null
+              ? '已记入所选日期对应的历史周期，请在流水页切换周期查看。'
+              : '历史流水已补记，周期余额已重新计算。',
+        AllocationEditorResult.updated => '流水修改已保存。',
+        AllocationEditorResult.updatedHistorical =>
+          historicalCycle == null ? '已转入所选日期对应的历史周期，周期余额已重新计算。' : '历史流水修正已保存。',
         AllocationEditorResult.deleted =>
           isHistorical ? '历史流水已删除，周期余额已重新计算。' : '流水已删除，余额已重新计算。',
         AllocationEditorResult.refundRequested => null,

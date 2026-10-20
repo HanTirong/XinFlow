@@ -46,6 +46,23 @@ final class SalaryCycle {
   final DateTime? closedAt;
   final int? finalRemainingCents;
 
+  bool containsDate(LocalDate date) {
+    final start = LocalDate.fromDateTime(startedAt);
+    return date.compareTo(start) >= 0 && date.compareTo(expectedPayDate) < 0;
+  }
+
+  static SalaryCycle? forDate(Iterable<SalaryCycle> cycles, LocalDate date) {
+    SalaryCycle? match;
+    for (final cycle in cycles) {
+      if (!cycle.containsDate(date)) continue;
+      if (match != null) {
+        throw StateError('该日期对应多个工资周期，请先检查周期设置。');
+      }
+      match = cycle;
+    }
+    return match;
+  }
+
   SalaryCycle close({required DateTime at, required int remainingCents}) {
     if (status != SalaryCycleStatus.active) {
       throw StateError('只有活动工资周期可以被封存。');

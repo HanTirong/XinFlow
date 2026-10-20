@@ -36,6 +36,7 @@ import 'package:xinflow/features/transactions/application/create_refund.dart';
 import 'package:xinflow/features/transactions/application/create_withdrawal.dart';
 import 'package:xinflow/features/transactions/application/delete_allocation.dart';
 import 'package:xinflow/features/transactions/application/update_allocation.dart';
+import 'package:xinflow/features/transactions/data/drift_allocation_cycle_transfer_repository.dart';
 import 'package:xinflow/features/transactions/data/drift_transaction_repository.dart';
 import 'package:xinflow/features/transactions/data/transaction_repository.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
@@ -290,6 +291,10 @@ final updateAllocationProvider = Provider<UpdateAllocation>(
     categories: ref.watch(categoryRepositoryProvider),
     salaryCycles: ref.watch(salaryCycleRepositoryProvider),
     transactions: ref.watch(transactionRepositoryProvider),
+    cycleTransfers: DriftAllocationCycleTransferRepository(
+      ref.watch(appDatabaseProvider),
+      clock: ref.watch(clockProvider),
+    ),
   ),
 );
 

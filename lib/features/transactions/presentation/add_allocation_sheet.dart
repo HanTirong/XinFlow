@@ -6,9 +6,18 @@ import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/core/money/money.dart';
 import 'package:xinflow/features/categories/domain/category.dart';
 import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/salary_cycles/presentation/cycle_picker_sheet.dart';
+import 'package:xinflow/features/transactions/domain/refund_policy.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
 
-enum AllocationEditorResult { created, updated, deleted, refundRequested }
+enum AllocationEditorResult {
+  created,
+  createdHistorical,
+  updated,
+  updatedHistorical,
+  deleted,
+  refundRequested,
+}
 
 final class AddAllocationSheet extends ConsumerStatefulWidget {
   const AddAllocationSheet({
@@ -112,11 +121,51 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
     try {
       final entry = widget.entry;
       final historicalCycle = widget.historicalCycle;
-      if (historicalCycle != null && entry == null) {
+      final targetCycle =
+          historicalCycle ??
+          SalaryCycle.forDate(
+            await ref.read(salaryCyclesProvider.future),
+            _occurredOn,
+          );
+      if (targetCycle == null) {
+        throw StateError('所选日期没有对应的工资周期，请核对记账日期。');
+      }
+      final targetsHistory = targetCycle.status == SalaryCycleStatus.closed;
+      if (historicalCycle == null &&
+          targetsHistory &&
+          (entry == null || entry.salaryCycleId != targetCycle.id)) {
+        if (!mounted) return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('记入历史工资周期？'),
+            content: Text(
+              '所选日期属于 ${formatSalaryCycleRange(targetCycle)}。'
+              '保存后会重新计算该周期余额，当前周期不会计入这笔账。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('确认保存'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (confirmed != true) {
+          setState(() => _isSaving = false);
+          return;
+        }
+      }
+      if (targetsHistory && entry == null) {
         await ref
             .read(correctClosedCycleProvider)
             .createAllocation(
-              cycleId: historicalCycle.id,
+              cycleId: targetCycle.id,
               amountCents: Money.parse(_amountController.text).cents,
               categoryId: _categoryId!,
               subcategoryId: _subcategoryId,
@@ -159,7 +208,11 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
       if (mounted) {
         Navigator.of(context).pop(
           entry == null
-              ? AllocationEditorResult.created
+              ? targetsHistory
+                    ? AllocationEditorResult.createdHistorical
+                    : AllocationEditorResult.created
+              : targetsHistory
+              ? AllocationEditorResult.updatedHistorical
               : AllocationEditorResult.updated,
         );
       }
@@ -170,6 +223,8 @@ final class _AddAllocationSheetState extends ConsumerState<AddAllocationSheet> {
         _errorMessage = switch (error) {
           FormatException(:final message) => message,
           ArgumentError(:final message) => message?.toString(),
+          StateError(:final message) => message.toString(),
+          TransactionRuleViolation(:final message) => message,
           _ => '保存失败，请稍后重试。',
         };
       });

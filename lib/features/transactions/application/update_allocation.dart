@@ -1,6 +1,8 @@
 import 'package:xinflow/core/date/local_date.dart';
 import 'package:xinflow/features/categories/data/category_repository.dart';
 import 'package:xinflow/features/salary_cycles/data/salary_cycle_repository.dart';
+import 'package:xinflow/features/salary_cycles/domain/salary_cycle.dart';
+import 'package:xinflow/features/transactions/data/allocation_cycle_transfer_repository.dart';
 import 'package:xinflow/features/transactions/data/transaction_repository.dart';
 import 'package:xinflow/features/transactions/domain/refund_policy.dart';
 import 'package:xinflow/features/transactions/domain/transaction_entry.dart';
@@ -11,11 +13,13 @@ final class UpdateAllocation {
     required this.categories,
     required this.salaryCycles,
     required this.transactions,
+    this.cycleTransfers,
   });
 
   final CategoryRepository categories;
   final SalaryCycleRepository salaryCycles;
   final TransactionRepository transactions;
+  final AllocationCycleTransferRepository? cycleTransfers;
 
   Future<TransactionEntry> execute({
     required String transactionId,
@@ -44,6 +48,13 @@ final class UpdateAllocation {
     if (activeCycle == null || activeCycle.id != current.salaryCycleId) {
       throw StateError('历史工资周期中的流水默认只读。');
     }
+    final targetCycle = SalaryCycle.forDate([
+      activeCycle,
+      ...await salaryCycles.listClosedCycles(),
+    ], occurredOn);
+    if (targetCycle == null) {
+      throw StateError('所选日期没有对应的工资周期，请核对记账日期。');
+    }
 
     final category = await categories.getById(categoryId);
     if (category == null || !category.isTopLevel) {
@@ -64,7 +75,7 @@ final class UpdateAllocation {
 
     final updated = TransactionEntry(
       id: current.id,
-      salaryCycleId: current.salaryCycleId,
+      salaryCycleId: targetCycle.id,
       entryKind: current.entryKind,
       flowType: category.flowType,
       amountCents: amountCents,
@@ -103,7 +114,15 @@ final class UpdateAllocation {
     } else if (activeWithdrawals.isNotEmpty) {
       throw const TransactionRuleViolation('已有提取记录的流水不能改为消费。');
     }
-    await transactions.update(updated);
+    if (targetCycle.id == activeCycle.id) {
+      await transactions.update(updated);
+    } else {
+      final transfers = cycleTransfers;
+      if (transfers == null) {
+        throw StateError('暂时无法跨周期修改流水，请重新打开后再试。');
+      }
+      await transfers.moveToClosedCycle(updated);
+    }
     return updated;
   }
 }
